@@ -96,7 +96,8 @@ class DeckManager:
         self._usb_observer.start()
         log.debug("Stream Deck USB watcher started")
 
-    def _handle_usb_event(self, action: str, device):
+    def _handle_usb_event(self, device):
+        action = device.action
         vendor = device.get("ID_VENDOR_ID", "").lower()
         if vendor != _STREAMDECK_VENDOR_ID:
             return

@@ -41,7 +41,8 @@ class USBMonitor:
             if self._try_mount(device.device_node):
                 return
 
-    def _handle_event(self, action: str, device):
+    def _handle_event(self, device):
+        action = device.action
         if action == "add":
             # Brief delay for filesystem to settle after device appears
             time.sleep(SETTLE_DELAY)
