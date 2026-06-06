@@ -96,7 +96,7 @@ class VideoPlayer:
         self._loading = False  # cancel any in-progress video load
         self._send(["loadfile", _BLANK_VIDEO, "replace"])
         self._send(["set_property", "pause", False])
-        self._send(["show-text", "{\\an5}" + message, 2147483647])
+        self._send(["show-text", message, 2147483647])
         log.info("Monitor %d: showing error", self.monitor)
 
     def clear_error_text(self):
