@@ -18,10 +18,12 @@
     <windowRule identifier="mpv-mon-1" matchOnce="true">
       <action name="MoveToOutput" output="HDMI-A-1"/>
       <action name="ToggleFullscreen"/>
+      <action name="HideCursor"/>
     </windowRule>
     <windowRule identifier="mpv-mon-2" matchOnce="true">
       <action name="MoveToOutput" output="HDMI-A-2"/>
       <action name="ToggleFullscreen"/>
+      <action name="HideCursor"/>
     </windowRule>
   </windowRules>
 
