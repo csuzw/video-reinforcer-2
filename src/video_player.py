@@ -84,7 +84,8 @@ class VideoPlayer:
 
     def stop(self):
         self._loading = False
-        self._send(["stop"])
+        self._send(["loadfile", _BLANK_VIDEO, "replace"])
+        self._send(["set_property", "pause", False])
         log.info("Monitor %d: stopped", self.monitor)
 
     def show_error_text(self, message: str):
