@@ -1,21 +1,19 @@
 [Unit]
 Description=Video Reinforcer
-# Start after the local filesystem and udev are ready
-After=local-fs.target udev.service
-Wants=udev.service
+After=labwc.service
+Requires=labwc.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/video-reinforcer
-# Switch to VT2 before starting so the kernel releases DRM master from the
-# VT system.  This allows both mpv processes to sequentially acquire and
-# release DRM master for their initial modeset, enabling dual-HDMI output.
-ExecStartPre=-/bin/chvt 2
+Environment=XDG_RUNTIME_DIR=/run/labwc
+Environment=WAYLAND_DISPLAY=wayland-0
+# Wait for labwc's Wayland socket before starting the app
+ExecStartPre=/bin/bash -c 'until [ -S /run/labwc/wayland-0 ]; do sleep 0.2; done'
 ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
 Restart=on-failure
 RestartSec=5
-# Give mpv time to claim DRM connectors on restart
 TimeoutStartSec=30
 
 [Install]

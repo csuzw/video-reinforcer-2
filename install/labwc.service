@@ -1,0 +1,26 @@
+[Unit]
+Description=labwc Wayland compositor (Video Reinforcer kiosk)
+After=local-fs.target udev.service
+Wants=udev.service
+
+[Service]
+Type=simple
+User=root
+# XDG_RUNTIME_DIR is created by RuntimeDirectory= below
+Environment=XDG_RUNTIME_DIR=/run/labwc
+Environment=WAYLAND_DISPLAY=wayland-0
+# Use the vc4 display controller directly; skip GPU (v3d) for compositor output
+Environment=WLR_BACKENDS=drm
+Environment=WLR_DRM_DEVICES=/dev/dri/card1
+# Pi 5 requires libliftoff for DRM plane allocation
+Environment=WLR_DRM_FORCE_LIBLIFTOFF=1
+# Keep compositor running even with no physical outputs connected
+Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
+RuntimeDirectory=labwc
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/labwc -C /opt/video-reinforcer/labwc
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+
+  <!--
+    Minimal labwc config for the Video Reinforcer kiosk.
+
+    Window rules move each mpv instance to its designated HDMI output and
+    fullscreen it.  MoveToOutput must fire before ToggleFullscreen because
+    labwc refuses to move a window that is already in fullscreen state.
+
+    mpv is therefore started WITHOUT --fullscreen; labwc applies both
+    actions when the window first appears.
+
+    matchOnce="true" so the rule only fires on first map, not on every
+    focus or re-raise.
+  -->
+
+  <windowRules>
+    <windowRule identifier="mpv-mon-1" matchOnce="true">
+      <action name="MoveToOutput" output="HDMI-A-1"/>
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+    <windowRule identifier="mpv-mon-2" matchOnce="true">
+      <action name="MoveToOutput" output="HDMI-A-2"/>
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+  </windowRules>
+
+</openbox_config>

@@ -1,6 +1,7 @@
 import glob
 import logging
 import threading
+import time
 from typing import Callable, Dict, List, Optional
 
 from .video_player import CONNECTORS, VideoPlayer
@@ -15,12 +16,8 @@ def _detect_connected_monitors() -> List[int]:
     """
     connected = []
     for monitor_idx, connector in CONNECTORS.items():
-        for path in glob.glob(f"/sys/class/drm/card*-{connector}/status"):
-            try:
-                if open(path).read().strip() == "connected":
-                    connected.append(monitor_idx)
-            except Exception:
-                pass
+        if _is_monitor_connected(connector):
+            connected.append(monitor_idx)
 
     if not connected:
         log.warning("Could not detect monitors via sysfs — assuming all connected")
@@ -29,12 +26,23 @@ def _detect_connected_monitors() -> List[int]:
     return sorted(connected)
 
 
+def _is_monitor_connected(connector: str) -> bool:
+    for path in glob.glob(f"/sys/class/drm/card*-{connector}/status"):
+        try:
+            if open(path).read().strip() == "connected":
+                return True
+        except Exception:
+            pass
+    return False
+
+
 class DisplayManager:
     def __init__(self, on_player_error: Callable[[int, str], None]):
         self._on_player_error = on_player_error
         self._players: Dict[int, VideoPlayer] = {}
         self._lock = threading.Lock()
         self._playing_monitor: Optional[int] = None
+        self._running = False
 
     def start(self):
         connected = _detect_connected_monitors()
@@ -45,6 +53,9 @@ class DisplayManager:
         for player in self._players.values():
             player.start()
 
+        self._running = True
+        threading.Thread(target=self._hotplug_watcher, daemon=True, name="hotplug-watcher").start()
+
     # ------------------------------------------------------------------
     # Playback control
     # ------------------------------------------------------------------
@@ -52,11 +63,10 @@ class DisplayManager:
     def play(self, monitor: int, path: str) -> bool:
         """Stop anything currently playing, start video on target monitor.
 
-        Returns False if the monitor is not connected. Attempts to dynamically
-        start a player if the monitor was connected after startup.
+        Returns False if the monitor is not connected.
         """
         with self._lock:
-            if monitor not in self._players and not self._try_add_monitor_locked(monitor):
+            if monitor not in self._players:
                 log.warning("Monitor %d is not connected", monitor)
                 return False
         self._stop_all_players()
@@ -98,6 +108,7 @@ class DisplayManager:
     # ------------------------------------------------------------------
 
     def shutdown(self):
+        self._running = False
         self._stop_all_players()
         with self._lock:
             players = list(self._players.values())
@@ -118,25 +129,52 @@ class DisplayManager:
                 self._playing_monitor = None
         self._on_player_error(monitor, message)
 
-    def _try_add_monitor_locked(self, monitor: int) -> bool:
-        """Check sysfs and start a player if the monitor is now connected.
+    def _hotplug_watcher(self):
+        """Poll sysfs every second for HDMI connect/disconnect events.
 
-        Must be called with self._lock held.
+        Under the Wayland/labwc architecture mpv does not exit when a monitor
+        is unplugged (the compositor moves its window), so we cannot rely on
+        the VideoPlayer watchdog alone.  This thread detects the physical
+        connector state and explicitly stops/starts players as needed.
         """
-        connector = CONNECTORS.get(monitor)
-        if not connector:
-            return False
-        for path in glob.glob(f"/sys/class/drm/card*-{connector}/status"):
-            try:
-                if open(path).read().strip() == "connected":
-                    log.info("Monitor %d connected since startup — starting player", monitor)
-                    player = VideoPlayer(monitor, on_error=self._handle_player_error)
-                    player.start()
-                    self._players[monitor] = player
-                    return True
-            except Exception:
-                pass
-        return False
+        known: Dict[int, bool] = {}
+        with self._lock:
+            for idx in CONNECTORS:
+                known[idx] = idx in self._players
+
+        while self._running:
+            time.sleep(1)
+            for monitor_idx, connector in list(CONNECTORS.items()):
+                is_connected = _is_monitor_connected(connector)
+                was_connected = known.get(monitor_idx, False)
+
+                if was_connected and not is_connected:
+                    known[monitor_idx] = False
+                    log.info("Monitor %d disconnected", monitor_idx)
+                    with self._lock:
+                        player = self._players.pop(monitor_idx, None)
+                        if self._playing_monitor == monitor_idx:
+                            self._playing_monitor = None
+                    if player:
+                        player.shutdown()
+                    self._on_player_error(
+                        monitor_idx,
+                        f"Monitor {monitor_idx} disconnected.\nCheck the HDMI cable.",
+                    )
+
+                elif not was_connected and is_connected:
+                    known[monitor_idx] = True
+                    log.info("Monitor %d connected", monitor_idx)
+                    with self._lock:
+                        already = monitor_idx in self._players
+                    if not already:
+                        # Brief pause lets labwc register the new output
+                        # before the mpv window tries to move to it.
+                        time.sleep(2)
+                        player = VideoPlayer(monitor_idx, on_error=self._handle_player_error)
+                        player.start()
+                        with self._lock:
+                            self._players[monitor_idx] = player
 
     def _stop_all_players(self):
         with self._lock:

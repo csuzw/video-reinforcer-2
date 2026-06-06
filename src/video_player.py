@@ -13,7 +13,9 @@ _SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
 _BLANK_VIDEO = "/opt/video-reinforcer/blank.mp4"
 _WATERMARK_ID = 1  # osd-overlay ID; must be unique per mpv instance
 
-# DRM connector names on Pi 5 — HDMI-A-1 is the first port (closest to USB-C power)
+# Wayland output names / DRM connector names on Pi 5.
+# HDMI-A-1 is the port closest to the USB-C power connector.
+# Used both as the labwc MoveToOutput target and for sysfs hot-plug detection.
 CONNECTORS = {
     1: "HDMI-A-1",
     2: "HDMI-A-2",
@@ -47,15 +49,17 @@ class VideoPlayer:
         if os.path.exists(self._socket_path):
             os.remove(self._socket_path)
 
-        connector = CONNECTORS.get(self.monitor, f"HDMI-A-{self.monitor}")
         audio_device = AUDIO_DEVICES.get(self.monitor)
         cmd = [
             "mpv",
-            "--vo=drm",
-            f"--drm-connector={connector}",
-            "--drm-device=/dev/dri/card1",
+            "--vo=gpu",
+            "--gpu-context=wayland",
+            # labwc window rules match on this app-id to place the window on
+            # the correct output and fullscreen it.  Do NOT pass --fullscreen
+            # here: labwc's MoveToOutput refuses to move an already-fullscreen
+            # window, so the rule must fire first.
+            f"--wayland-app-id=mpv-mon-{self.monitor}",
             "--loop-file=inf",
-            "--fullscreen",
             "--no-terminal",
             "--really-quiet",
             "--idle=yes",

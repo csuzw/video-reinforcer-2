@@ -13,6 +13,7 @@ echo "=== Video Reinforcer Setup ==="
 apt-get update
 apt-get install -y \
     mpv \
+    labwc \
     python3-pip \
     python3-dev \
     libhidapi-libusb0 \
@@ -73,23 +74,14 @@ fi
 systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
 # ---- Kernel console tweaks ----
-# Remove tty1 framebuffer console — mpv holds the display; no visual console needed
+# labwc takes exclusive DRM/KMS control; no console overlay needed.
+# Remove framebuffer console entries and DRM hacks from previous installs.
 sed -i 's/ console=tty1//' /boot/firmware/cmdline.txt 2>/dev/null || true
+sed -i 's/ fbcon=map:1//' /boot/firmware/cmdline.txt 2>/dev/null || true
+sed -i 's/ vt.global_cursor_default=0//' /boot/firmware/cmdline.txt 2>/dev/null || true
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
 fi
-# Hide the VT cursor globally so it doesn't overlay mpv's DRM output
-if ! grep -q "vt.global_cursor_default=0" /boot/firmware/cmdline.txt 2>/dev/null; then
-    sed -i 's/$/ vt.global_cursor_default=0/' /boot/firmware/cmdline.txt
-fi
-# Remove fbcon=map:1 if previously added — it breaks dual-monitor DRM master handoff
-sed -i 's/ fbcon=map:1//' /boot/firmware/cmdline.txt 2>/dev/null || true
-
-# ---- Mask getty@tty2 ----
-# The service switches to VT2 (chvt 2) on start to allow both mpv processes to
-# claim DRM master sequentially.  Without this, a login prompt would appear on
-# monitor 2 after the VT switch.
-systemctl mask getty@tty2
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
 mkdir -p /etc/systemd/system/getty@tty1.service.d
@@ -99,11 +91,19 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
 EOF
 
-# ---- Install and enable systemd service ----
+# ---- Deploy labwc kiosk config ----
+mkdir -p "$APP_DIR/labwc"
+cp "$SCRIPT_DIR/labwc/rc.xml" "$APP_DIR/labwc/rc.xml"
+
+# ---- Install and enable systemd services ----
+cp "$SCRIPT_DIR/labwc.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/video-reinforcer.service" /etc/systemd/system/
 systemctl daemon-reload
+systemctl enable labwc
 systemctl enable "$SERVICE"
-systemctl start "$SERVICE"
+# Start labwc first, then the app (which depends on it)
+systemctl restart labwc
+systemctl restart "$SERVICE"
 
 echo ""
 echo "=== Setup complete ==="
