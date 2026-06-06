@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 _SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
 _BLANK_VIDEO = "/opt/video-reinforcer/blank.mp4"
+_WATERMARK_ID = 1  # osd-overlay ID; must be unique per mpv instance
 
 # DRM connector names on Pi 5 — HDMI-A-1 is the first port (closest to USB-C power)
 CONNECTORS = {
@@ -83,10 +84,12 @@ class VideoPlayer:
         self._send(["set_property", "osd-color", "#D23C3C"])
         self._send(["set_property", "osd-border-color", "#000000"])
         self._send(["set_property", "osd-border-size", 2])
+        self._show_watermark()
         log.info("Monitor %d player ready (connector=%s)", self.monitor, connector)
 
     def play(self, path: str):
         self._loading = True
+        self._hide_watermark()
         self._send(["loadfile", path, "replace"])
         self._send(["set_property", "pause", False])
         log.info("Monitor %d: playing %s", self.monitor, path)
@@ -95,22 +98,20 @@ class VideoPlayer:
         self._loading = False
         self._send(["loadfile", _BLANK_VIDEO, "replace"])
         self._send(["set_property", "pause", False])
+        self._show_watermark()
         log.info("Monitor %d: stopped", self.monitor)
 
     def show_error_text(self, message: str):
-        """Display error message via mpv OSD overlaid on a black background.
-
-        Loads a pre-generated silent black video so mpv renders frames
-        (OSD requires active rendering). {\\an5} centres the text on screen.
-        """
-        self._loading = False  # cancel any in-progress video load
+        """Display error message via mpv OSD overlaid on a black background."""
+        self._loading = False
+        self._hide_watermark()
         self._send(["loadfile", _BLANK_VIDEO, "replace"])
         self._send(["set_property", "pause", False])
         self._send(["show-text", message, 2147483647])
         log.info("Monitor %d: showing error", self.monitor)
 
     def clear_error_text(self):
-        """Clear OSD error text and return to a blank screen."""
+        """Clear OSD error text and return to blank screen with watermark."""
         self._send(["show-text", "", 1])
         self.stop()
 
@@ -124,6 +125,22 @@ class VideoPlayer:
                 self._process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._process.kill()
+
+    # ------------------------------------------------------------------
+    # Watermark
+    # ------------------------------------------------------------------
+
+    def _show_watermark(self):
+        # Bottom-right corner, small white text with black outline.
+        # osd-overlay persists across loadfile and is separate from show-text.
+        text = (
+            f"{{\\an3\\fs20\\c&HFFFFFF&\\bord2\\3c&H000000&\\shad0"
+            f"\\pos(1900,1060)}}Video Reinforcer  •  Monitor {self.monitor}"
+        )
+        self._send(["osd-overlay", _WATERMARK_ID, "ass-events", text, 1920, 1080, 0, False, False])
+
+    def _hide_watermark(self):
+        self._send(["osd-overlay", _WATERMARK_ID, "none", "", 0, 0, 0, False, False])
 
     # ------------------------------------------------------------------
     # Background threads

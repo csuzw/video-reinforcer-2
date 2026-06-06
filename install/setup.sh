@@ -73,6 +73,8 @@ fi
 systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
 # ---- Kernel console tweaks ----
+# Remove tty1 framebuffer console — mpv holds the display; no visual console needed
+sed -i 's/ console=tty1//' /boot/firmware/cmdline.txt 2>/dev/null || true
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
 fi
