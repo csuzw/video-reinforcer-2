@@ -44,8 +44,7 @@ python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
 # ---- Blank video for OSD error display ----
-# mpv --vo=drm requires audio+video; this 1-second loop is the silent black background
-# that error messages are overlaid on via OSD.
+# A 1-second looping black video that error messages are overlaid on via mpv OSD.
 ffmpeg -y \
     -f lavfi -i "color=black:size=1920x1080:rate=1" \
     -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" \
@@ -53,9 +52,9 @@ ffmpeg -y \
     -c:a aac -b:a 32k -shortest \
     "$APP_DIR/blank.mp4"
 
-# ---- Disable desktop display manager (conflicts with DRM video output) ----
-# The app uses mpv --vo=drm which needs exclusive display access.
-# Detect the running display manager by name before disabling it so quit can restore it.
+# ---- Disable desktop display manager (conflicts with labwc Wayland compositor) ----
+# labwc takes exclusive DRM/KMS ownership; no other display manager can run alongside it.
+# Save the DM name so it can be restarted automatically when the app stops.
 DM_ID=""
 for DM in lightdm gdm gdm3 sddm xdm lxdm; do
     # Accept active (fresh install) or disabled (re-run after prior setup)

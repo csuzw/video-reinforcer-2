@@ -2,9 +2,25 @@
 
 A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato Stream Deck (or keyboard) triggers full-screen looping video on a specific HDMI monitor, with audio delivered through that monitor's built-in speakers. Only one video plays at a time. Monitors are blank and silent otherwise.
 
+---
+
+## Supported hardware and OS
+
+| Component | Requirement |
+|---|---|
+| **Pi model** | Raspberry Pi 5 only |
+| **Operating system** | Raspberry Pi OS Bookworm (64-bit) — Lite or Desktop |
+| **Monitors** | Up to 2, connected via micro-HDMI; audio delivered over HDMI |
+| **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
+| **Config/video storage** | USB stick |
+
+The app has not been tested on earlier Pi models or other Linux distributions.
+
+---
+
 ## How it works
 
-1. The Pi boots directly into the app — no desktop, no login prompt.
+1. The Pi boots directly into the app — no login prompt.
 2. The app reads `config.json` from a USB stick to determine which buttons play which videos on which monitor.
 3. Press a Stream Deck button (or keyboard key) → video starts looping on the assigned monitor.
 4. Press the same button again → video stops, monitor goes blank.
@@ -12,15 +28,11 @@ A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato
 6. Remove the USB stick → both monitors show an error message, all buttons go dark.
 7. Re-insert the USB stick (with the same or updated config) → app reloads automatically, no reboot needed.
 
----
+### Architecture
 
-## Hardware requirements
+The app runs as a systemd service. It starts **labwc** (the default Wayland compositor on Raspberry Pi OS Bookworm) to drive both HDMI outputs, then launches a persistent **mpv** process per monitor. labwc places each mpv window on the correct output and fullscreens it. The Python process manages config loading, USB hot-plug, Stream Deck input, and IPC to each mpv instance.
 
-- Raspberry Pi 5
-- Up to 2 HDMI monitors with built-in speakers (audio is delivered via HDMI)
-- Elgato Stream Deck — any model works (Mini 6-key, Classic 15-key, XL 32-key, etc.)
-- USB stick for videos and configuration
-- Optional: USB keyboard (can be used instead of or alongside the Stream Deck)
+When the app stops (via the quit button or `systemctl stop`), the desktop display manager restarts automatically.
 
 ---
 
@@ -36,7 +48,7 @@ A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato
     stars.png
 ```
 
-The app looks for `config.json` at the root of the USB stick. Videos and button images can be in any subfolder — the paths in `config.json` are relative to the root of the USB stick.
+The app looks for `config.json` at the root of the USB stick. Videos and button images can be in any subfolder — paths in `config.json` are relative to the root of the USB stick.
 
 ---
 
@@ -96,7 +108,7 @@ Buttons not listed in `config.json` remain dark on the Stream Deck.
 
 ### `quit` (optional)
 
-Stops the app cleanly and prevents it from auto-restarting until manually started again (useful for maintenance or accessing the underlying OS via SSH).
+Stops the app cleanly and returns to the desktop. The service does not restart until the Pi is rebooted or the service is started manually via SSH.
 
 | Field | Required | Description |
 |---|---|---|
@@ -104,7 +116,7 @@ Stops the app cleanly and prevents it from auto-restarting until manually starte
 | `key` | No | Keyboard key that triggers quit |
 | `button.*` | No | Appearance of the quit key on the Stream Deck (same fields as above) |
 
-Either or both of `stream_deck_button` and `key` can be specified. If `quit` is omitted entirely, there is no quit button — use SSH instead (see below).
+Either or both of `stream_deck_button` and `key` can be specified. If `quit` is omitted entirely, there is no quit button — use SSH instead.
 
 ### Keyboard key names
 
@@ -121,18 +133,18 @@ Key names are case-insensitive. Common values:
 
 ### Monitor numbering
 
-`1` refers to the HDMI port closest to the USB-C power connector on the Pi 5. `2` is the other port.
+`1` is the micro-HDMI port closest to the USB-C power connector on the Pi 5. `2` is the other port.
 
 ---
 
 ## Installation
 
-### 1. Flash Raspberry Pi OS Lite (64-bit)
+### 1. Flash Raspberry Pi OS Bookworm (64-bit)
 
 Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/). When prompted:
 
-- Choose **Raspberry Pi OS Lite (64-bit)** — no desktop needed
-- **Enable SSH** in the advanced options (this gives you a way back in if anything goes wrong)
+- Choose **Raspberry Pi OS Lite (64-bit)** or **Raspberry Pi OS (64-bit)** — both work
+- **Enable SSH** in the advanced options
 - Set a hostname, username, and password
 
 ### 2. Clone and run setup
@@ -145,7 +157,12 @@ cd video-reinforcer-2
 sudo bash install/setup.sh
 ```
 
-The setup script installs system dependencies (`mpv`, Python packages, etc.), deploys the app to `/opt/video-reinforcer`, and registers it as a systemd service that starts automatically on boot.
+The setup script:
+- Installs system packages: `mpv`, `labwc`, `seatd`, Python dev tools, HID libraries
+- Deploys the app to `/opt/video-reinforcer`
+- Generates a blank video used as the OSD background
+- Disables any running desktop display manager (saves its name so it can be restored when the app exits)
+- Installs and enables three systemd services: `seatd`, `labwc`, and `video-reinforcer`
 
 ### 3. Insert the USB stick and reboot
 
@@ -153,13 +170,11 @@ The setup script installs system dependencies (`mpv`, Python packages, etc.), de
 sudo reboot
 ```
 
-The Pi will boot directly into the app. Insert your configured USB stick and the buttons will light up.
+The Pi boots directly into the app. Insert your configured USB stick and the buttons will light up.
 
 ---
 
 ## Updating the app
-
-To pull the latest code and redeploy:
 
 ```bash
 cd video-reinforcer-2
@@ -171,27 +186,12 @@ sudo bash install/setup.sh
 
 ## Running the tests
 
-The test suite covers config parsing, button rendering, display logic, and the full app state machine. Tests run on the Pi without any hardware connected — all hardware components (mpv, Stream Deck, USB mounting) are mocked out.
+The test suite covers config parsing, button rendering, display logic, and the full app state machine. Tests run without any hardware connected — all hardware components (mpv, Stream Deck, USB mounting) are mocked out.
 
 ```bash
-# Install dev dependencies (once)
 pip3 install -r requirements-dev.txt
-
-# Run all tests
-cd /path/to/video-reinforcer-2
 python3 -m pytest tests/ -v
 ```
-
-Example output:
-
-```
-tests/test_config_loader.py::TestParseButtons::test_minimal_valid_config PASSED
-tests/test_config_loader.py::TestParseButtons::test_missing_buttons_section PASSED
-...
-tests/test_main.py::TestDeckEvents::test_deck_disconnect_during_playing_does_not_interrupt PASSED
-```
-
-The tests do **not** require a USB stick, Stream Deck, monitors, or videos to be present.
 
 ---
 
@@ -201,73 +201,78 @@ No app update needed — just edit the files on the USB stick from any PC, then 
 
 ---
 
-## Getting back to a normal shell
+## Getting back to the desktop or a shell
 
-The app runs as a background service. The underlying Raspberry Pi OS is always intact. Several ways to access it:
+### Via the quit button
 
-### Via SSH (recommended)
+If a quit button is configured in `config.json`, pressing it stops the app cleanly. The desktop display manager restarts automatically and you can log in normally.
+
+### Via SSH
 
 ```bash
-ssh pi@<pi-ip-address>
+ssh <username>@<pi-hostname>
 
-# Stop the app (stays stopped until manually started or rebooted)
+# Stop the app — desktop restarts automatically
 sudo systemctl stop video-reinforcer
 
 # Prevent it from starting on next boot
 sudo systemctl disable video-reinforcer
 
-# Re-enable and start it again later
+# Re-enable and start it again
 sudo systemctl enable video-reinforcer && sudo systemctl start video-reinforcer
 ```
-
-### Via the quit button
-
-If a quit button is configured in `config.json`, pressing it stops the service cleanly. The monitors will go blank. You can then SSH in or plug in a keyboard and use the Pi normally.
 
 ### Useful commands
 
 ```bash
-# View live logs from the app
+# View live logs
 journalctl -u video-reinforcer -f
 
 # Check service status
 systemctl status video-reinforcer
 
-# Restart the app (e.g. after a config change requires restart)
-sudo systemctl restart video-reinforcer
+# Check compositor status
+systemctl status labwc
 ```
 
 ---
 
 ## Error handling and recovery
 
-The app is designed to display a clear message on screen for every error state, and to recover automatically when the problem is resolved — no restart required.
+Every error state is shown on screen in plain English. The app recovers automatically when the problem is resolved — no restart needed.
 
 | Situation | What you see | Recovery |
 |---|---|---|
 | No USB stick | Error on all monitors, buttons dark | Insert USB stick |
-| Bad config.json | Error on all monitors, buttons dark | Fix config, re-insert USB stick |
+| Bad `config.json` | Error on all monitors, buttons dark | Fix config, re-insert USB stick |
 | USB replugged | Config reloads automatically | — |
-| Button pressed for disconnected monitor | 4-second error, then clears | Check cables or fix config.json |
+| Button pressed for disconnected monitor | 4-second error, then clears | Check cables or fix `config.json` |
 | Video file missing or unplayable | 4-second error, then clears | Check files on USB stick |
 | Monitor unplugged while running | Error on remaining monitors | Reconnect monitor |
-| Stream Deck unplugged | Error on all monitors | Reconnect Stream Deck — buttons relight automatically |
+| Stream Deck unplugged | Error on all monitors | Reconnect — buttons relight automatically |
 
 ---
 
 ## Troubleshooting
 
 **Monitors show an error message**
-- The error message on screen will tell you the specific problem.
+- The error text on screen describes the specific problem.
 - Check the USB stick is inserted and contains `config.json` at its root.
-- Check `config.json` is valid JSON (use a JSON validator on another PC).
-- Check that all video and image paths in `config.json` match files that exist on the USB stick.
+- Validate `config.json` with a JSON validator on another PC.
+- Check that all video and image paths in `config.json` match files on the USB stick.
 
 **Video plays but no audio**
 - Ensure the monitor's volume is turned up.
-- Check the correct monitor is assigned in `config.json` — monitor `1` is the HDMI port nearest the power connector.
+- Check the correct monitor is assigned in `config.json` — monitor `1` is the port nearest the power connector.
 
 **App doesn't start on boot**
-- Check: `systemctl status video-reinforcer`
-- Check logs: `journalctl -u video-reinforcer -f`
-- Re-run `sudo bash install/setup.sh` to reinstall.
+```bash
+systemctl status video-reinforcer
+systemctl status labwc
+journalctl -u video-reinforcer -b
+```
+- Re-running `sudo bash install/setup.sh` will reinstall and restart everything.
+
+**Monitors stay blank after boot (no error message)**
+- labwc may have failed to start. Check: `systemctl status labwc`
+- If labwc crashed, check: `journalctl -u labwc -b`
