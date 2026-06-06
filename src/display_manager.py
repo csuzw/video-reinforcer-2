@@ -1,15 +1,15 @@
+import glob
 import logging
 import os
 import tempfile
-from typing import Optional
+from typing import Dict, List, Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .video_player import VideoPlayer
+from .video_player import VideoPlayer, CONNECTORS
 
 log = logging.getLogger(__name__)
 
-_MONITOR_COUNT = 2
 _ERROR_RESOLUTION = (1920, 1080)
 _ERROR_BG = (20, 20, 20)
 _ERROR_FG = (210, 60, 60)
@@ -17,13 +17,40 @@ _ERROR_FONT_SIZE = 42
 _FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
+def _detect_connected_monitors() -> List[int]:
+    """Return sorted list of monitor indices (1, 2) that have a display connected.
+
+    Reads DRM connector status from sysfs. Falls back to all monitors if the
+    paths don't exist (e.g. running outside a Pi / before DRM initialises).
+    """
+    connected = []
+    for monitor_idx, connector in CONNECTORS.items():
+        pattern = f"/sys/class/drm/card*-{connector}/status"
+        for path in glob.glob(pattern):
+            try:
+                status = open(path).read().strip()
+                if status == "connected":
+                    connected.append(monitor_idx)
+            except Exception:
+                pass
+
+    if not connected:
+        log.warning("Could not detect monitor connections via sysfs — assuming all connected")
+        return sorted(CONNECTORS.keys())
+
+    return sorted(connected)
+
+
 class DisplayManager:
     def __init__(self):
-        self._players = {i: VideoPlayer(i) for i in range(1, _MONITOR_COUNT + 1)}
+        self._players: Dict[int, VideoPlayer] = {}
         self._playing_monitor: Optional[int] = None
         self._tmp_files: list[str] = []
 
     def start(self):
+        connected = _detect_connected_monitors()
+        log.info("Connected monitors: %s", connected)
+        self._players = {i: VideoPlayer(i) for i in connected}
         for player in self._players.values():
             player.start()
 
@@ -33,6 +60,9 @@ class DisplayManager:
 
     def play(self, monitor: int, path: str):
         """Stop anything currently playing (any monitor), start video on target monitor."""
+        if monitor not in self._players:
+            log.warning("Monitor %d is not connected — ignoring play request", monitor)
+            return
         self._stop_all_players()
         self._playing_monitor = monitor
         self._players[monitor].play(path)

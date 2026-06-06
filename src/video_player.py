@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 _SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
 
 # DRM connector names on Pi 5 — HDMI-A-1 is the first port (closest to USB-C power)
-_CONNECTORS = {
+CONNECTORS = {
     1: "HDMI-A-1",
     2: "HDMI-A-2",
 }
@@ -30,7 +30,7 @@ class VideoPlayer:
         if os.path.exists(self._socket_path):
             os.remove(self._socket_path)
 
-        connector = _CONNECTORS.get(self.monitor, f"HDMI-A-{self.monitor}")
+        connector = CONNECTORS.get(self.monitor, f"HDMI-A-{self.monitor}")
         cmd = [
             "mpv",
             "--vo=drm",
