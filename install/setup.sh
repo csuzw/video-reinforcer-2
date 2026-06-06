@@ -82,6 +82,10 @@ fi
 if ! grep -q "vt.global_cursor_default=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ vt.global_cursor_default=0/' /boot/firmware/cmdline.txt
 fi
+# Disable DRM fbdev emulation — mpv uses KMS directly; fbcon is not needed on a kiosk
+if ! grep -q "drm.fbdev_emulation=0" /boot/firmware/cmdline.txt 2>/dev/null; then
+    sed -i 's/$/ drm.fbdev_emulation=0/' /boot/firmware/cmdline.txt
+fi
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
 mkdir -p /etc/systemd/system/getty@tty1.service.d
