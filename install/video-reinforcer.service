@@ -8,7 +8,6 @@ Wants=udev.service
 Type=simple
 User=root
 WorkingDirectory=/opt/video-reinforcer
-ExecStartPre=-/bin/chvt 2
 ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
 Restart=on-failure
 RestartSec=5

@@ -43,7 +43,7 @@ class VideoPlayer:
         self._send_lock = threading.Lock()
         self._loading = False  # True between loadfile command and playback-restart event
 
-    def start(self):
+    def start(self, lease_fd: Optional[int] = None):
         if os.path.exists(self._socket_path):
             os.remove(self._socket_path)
 
@@ -61,9 +61,15 @@ class VideoPlayer:
             "--pause",
             f"--input-ipc-server={self._socket_path}",
         ]
+        if lease_fd is not None:
+            cmd.append(f"--drm-device=/proc/self/fd/{lease_fd}")
         if audio_device:
             cmd.append(f"--audio-device={audio_device}")
-        self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        popen_kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if lease_fd is not None:
+            popen_kwargs["pass_fds"] = (lease_fd,)
+        self._process = subprocess.Popen(cmd, **popen_kwargs)
         self._running = True
 
         # Wait up to 5 s for IPC socket to appear

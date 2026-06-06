@@ -1,5 +1,6 @@
 import glob
 import logging
+import os
 import threading
 from typing import Callable, Dict, List, Optional
 
@@ -35,14 +36,25 @@ class DisplayManager:
         self._players: Dict[int, VideoPlayer] = {}
         self._lock = threading.Lock()
         self._playing_monitor: Optional[int] = None
+        self._drm_grantor_fd: Optional[int] = None
 
     def start(self):
         connected = _detect_connected_monitors()
         log.info("Connected monitors: %s", connected)
+
+        lease_fds: Dict[int, int] = {}
+        if len(connected) > 1:
+            try:
+                from .drm_lease import create_leases
+                self._drm_grantor_fd, lease_fds = create_leases()
+                log.info("DRM leases active for monitors %s", sorted(lease_fds))
+            except Exception as exc:
+                log.warning("DRM leases unavailable (%s) — only one monitor may render video", exc)
+
         with self._lock:
             self._players = {i: VideoPlayer(i, on_error=self._handle_player_error) for i in connected}
-        for player in self._players.values():
-            player.start()
+        for monitor, player in self._players.items():
+            player.start(lease_fd=lease_fds.get(monitor))
 
     # ------------------------------------------------------------------
     # Playback control
@@ -103,6 +115,12 @@ class DisplayManager:
             self._players.clear()
         for player in players:
             player.shutdown()
+        if self._drm_grantor_fd is not None:
+            try:
+                os.close(self._drm_grantor_fd)
+            except OSError:
+                pass
+            self._drm_grantor_fd = None
 
     # ------------------------------------------------------------------
     # Internals
