@@ -145,7 +145,7 @@ class TestErrorDisplay:
         dm = _make_dm()
         p1 = _add_player(dm, 1)
         p2 = _add_player(dm, 2)
-        with patch("src.display_manager.DisplayManager._render_error_png", return_value="/tmp/err.png"):
+        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
             dm.show_error("Something went wrong")
         p1.play.assert_called_once_with("/tmp/err.png")
         p2.play.assert_called_once_with("/tmp/err.png")
@@ -155,14 +155,14 @@ class TestErrorDisplay:
         p1 = _add_player(dm, 1)
         dm.play(1, "/video.mp4")
         p1.stop.reset_mock()
-        with patch("src.display_manager.DisplayManager._render_error_png", return_value="/tmp/err.png"):
+        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
             dm.show_error("Error")
         p1.stop.assert_called_once()
 
     def test_show_error_on_single_monitor(self):
         dm = _make_dm()
         p1 = _add_player(dm, 1)
-        with patch("src.display_manager.DisplayManager._render_error_png", return_value="/tmp/err.png"):
+        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
             dm.show_error("Monitor 2 missing")
         p1.play.assert_called_once()
 

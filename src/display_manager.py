@@ -1,6 +1,7 @@
 import glob
 import logging
 import os
+import subprocess
 import tempfile
 import threading
 from typing import Callable, Dict, List, Optional
@@ -91,11 +92,11 @@ class DisplayManager:
     def show_error(self, message: str):
         """Display an error message on all connected monitors."""
         self._stop_all_players()
-        img_path = self._render_error_png(message)
+        video_path = self._render_error_video(message)
         with self._lock:
             players = list(self._players.values())
         for player in players:
-            player.play(img_path)
+            player.play(video_path)
 
     def clear_error(self):
         """Remove error screens, return all monitors to blank."""
@@ -155,7 +156,12 @@ class DisplayManager:
             player.stop()
         self._playing_monitor = None
 
-    def _render_error_png(self, message: str) -> str:
+    def _render_error_video(self, message: str) -> str:
+        """Render error message as a short looping video compatible with DRM output.
+
+        mpv's --vo=drm requires a proper video stream (yuv420p). PNG files are
+        not reliably supported, so we render via PIL then convert with ffmpeg.
+        """
         img = Image.new("RGB", _ERROR_RESOLUTION, _ERROR_BG)
         draw = ImageDraw.Draw(img)
 
@@ -177,11 +183,31 @@ class DisplayManager:
             draw.text((x, y), line, fill=_ERROR_FG, font=font)
             y += line_h
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        tmp.close()
-        img.save(tmp.name)
-        self._tmp_files.append(tmp.name)
-        return tmp.name
+        png_tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        png_tmp.close()
+        img.save(png_tmp.name)
+
+        mp4_tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        mp4_tmp.close()
+        try:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-loop", "1", "-i", png_tmp.name,
+                    "-t", "1",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                    "-pix_fmt", "yuv420p",
+                    mp4_tmp.name,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        finally:
+            os.unlink(png_tmp.name)
+
+        self._tmp_files.append(mp4_tmp.name)
+        return mp4_tmp.name
 
     def _cleanup_tmp(self):
         for path in self._tmp_files:
