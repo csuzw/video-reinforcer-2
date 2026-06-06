@@ -1,0 +1,39 @@
+{
+  "buttons": {
+    "0": {
+      "video": "videos/reward1.mp4",
+      "monitor": 1,
+      "button": {
+        "type": "color",
+        "color": "#E63946",
+        "label": "Left"
+      }
+    },
+    "1": {
+      "video": "videos/reward2.mp4",
+      "monitor": 2,
+      "button": {
+        "type": "color",
+        "color": "#457B9D",
+        "label": "Right"
+      }
+    },
+    "2": {
+      "video": "videos/reward3.mp4",
+      "monitor": 1,
+      "button": {
+        "type": "image",
+        "image": "button-images/stars.png",
+        "label": "Stars"
+      }
+    },
+    "3": {
+      "video": "videos/reward4.mp4",
+      "monitor": 2,
+      "button": {
+        "type": "color",
+        "color": "#2EC4B6"
+      }
+    }
+  }
+}
