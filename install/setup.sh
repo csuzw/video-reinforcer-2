@@ -82,9 +82,12 @@ fi
 if ! grep -q "vt.global_cursor_default=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ vt.global_cursor_default=0/' /boot/firmware/cmdline.txt
 fi
-# Disable DRM fbdev emulation — mpv uses KMS directly; fbcon is not needed on a kiosk
-if ! grep -q "drm.fbdev_emulation=0" /boot/firmware/cmdline.txt 2>/dev/null; then
-    sed -i 's/$/ drm.fbdev_emulation=0/' /boot/firmware/cmdline.txt
+# Redirect fbcon to a non-existent framebuffer so it has nowhere to display.
+# mpv uses KMS directly and is unaffected; this prevents fbcon from overlaying
+# the console on either HDMI output.
+if ! grep -q "fbcon=map:1" /boot/firmware/cmdline.txt 2>/dev/null; then
+    sed -i 's/ drm.fbdev_emulation=0//' /boot/firmware/cmdline.txt  # remove if previously added
+    sed -i 's/$/ fbcon=map:1/' /boot/firmware/cmdline.txt
 fi
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
