@@ -72,9 +72,13 @@ else
 fi
 systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
-# ---- Disable console blanking (keeps DRM state clean) ----
+# ---- Kernel console tweaks ----
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
+fi
+# Hide the VT cursor globally so it doesn't overlay mpv's DRM output
+if ! grep -q "vt.global_cursor_default=0" /boot/firmware/cmdline.txt 2>/dev/null; then
+    sed -i 's/$/ vt.global_cursor_default=0/' /boot/firmware/cmdline.txt
 fi
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
