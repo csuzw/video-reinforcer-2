@@ -5,10 +5,8 @@ import subprocess
 import threading
 from typing import Dict, Optional
 
-_TRANSIENT_ERROR_DURATION = 4.0  # seconds
-
-from .button_renderer import render_blank, render_button
-from .config_loader import AppConfig, ConfigError, QuitConfig, load_config
+from .button_renderer import render_button
+from .config_loader import AppConfig, ConfigError, load_config
 from .deck_manager import DeckManager
 from .display_manager import DisplayManager
 from .keyboard_reader import KeyboardReader
@@ -17,36 +15,51 @@ from .usb_monitor import USBMonitor
 log = logging.getLogger(__name__)
 
 USB_MOUNT = "/mnt/vr-usb"
-
-_NO_USB_MSG = "No USB stick detected.\nPlease insert the USB stick\nwith videos and config.json."
-_BAD_CONFIG_MSG = "Configuration error:\n{detail}\n\nCheck config.json on the USB stick."
 _SYSTEMD_SERVICE = "video-reinforcer"
+_TRANSIENT_ERROR_DURATION = 4.0  # seconds before auto-clearing a transient error
+
+_MSG_NO_USB = (
+    "No USB stick detected.\n"
+    "Please insert the USB stick\n"
+    "with videos and config.json."
+)
+_MSG_NO_DECK = (
+    "Stream Deck disconnected.\n"
+    "Please reconnect it.\n"
+    "(Keyboard input is still active.)"
+)
 
 
 class App:
     def __init__(self):
         self._config: Optional[AppConfig] = None
         self._playing_button: Optional[int] = None
-        self._key_map: Dict[str, int] = {}  # keyboard key → button index
+        self._key_map: Dict[str, int] = {}
 
-        self._display = DisplayManager()
-        self._deck = DeckManager(on_button_press=self._on_deck_press)
+        # Hardware state — drives what is shown on screen
+        self._usb_ok = False
+        self._deck_connected = False
+        self._transient_timer: Optional[threading.Timer] = None
+
+        self._display = DisplayManager(on_player_error=self._on_player_error)
+        self._deck = DeckManager(
+            on_button_press=self._on_deck_press,
+            on_connected=self._on_deck_connected,
+            on_disconnected=self._on_deck_disconnected,
+        )
         self._keyboard = KeyboardReader(on_key=self._on_key)
         self._usb = USBMonitor(
             on_mounted=self._on_usb_mounted,
             on_unmounted=self._on_usb_unmounted,
         )
         self._stop = threading.Event()
-        self._transient_timer: Optional[threading.Timer] = None
 
     def run(self):
         log.info("Video Reinforcer starting")
         self._display.start()
-        self._display.show_error(_NO_USB_MSG)
+        self._display.show_error(_MSG_NO_USB)
 
-        if not self._deck.connect():
-            log.warning("No Stream Deck found — continuing without it")
-
+        self._deck_connected = self._deck.connect()
         self._keyboard.start()
         self._usb.start()
 
@@ -66,31 +79,61 @@ class App:
             config = load_config()
         except ConfigError as e:
             log.error("Config error: %s", e)
+            self._usb_ok = False
             self._config = None
             self._playing_button = None
             self._key_map = {}
-            self._display.show_error(_BAD_CONFIG_MSG.format(detail=str(e)))
+            self._display.show_error(f"Configuration error:\n{e}\n\nCheck config.json on the USB stick.")
             self._deck.clear_all_keys()
             return
 
         self._config = config
+        self._usb_ok = True
         self._playing_button = None
         self._key_map = config.key_map()
-        self._display.clear_error()
+        self._cancel_transient_error()
+        self._refresh_display()
         self._apply_deck_layout()
         log.info("Config loaded — %d button(s) configured", len(config.buttons))
 
     def _on_usb_unmounted(self):
         log.info("USB removed")
         self._cancel_transient_error()
+        self._usb_ok = False
         self._config = None
         self._playing_button = None
         self._key_map = {}
-        self._display.show_error(_NO_USB_MSG)
+        self._display.show_error(_MSG_NO_USB)
         self._deck.clear_all_keys()
 
     # ------------------------------------------------------------------
-    # Input events
+    # Stream Deck events
+    # ------------------------------------------------------------------
+
+    def _on_deck_connected(self):
+        log.info("Stream Deck reconnected")
+        self._deck_connected = True
+        self._refresh_display()
+        self._apply_deck_layout()
+
+    def _on_deck_disconnected(self):
+        log.info("Stream Deck disconnected")
+        self._deck_connected = False
+        # Only show the deck error if USB is OK (USB error takes priority)
+        if self._usb_ok and self._playing_button is None:
+            self._display.show_error(_MSG_NO_DECK)
+
+    # ------------------------------------------------------------------
+    # Player errors (monitor unplugged, video unplayable)
+    # ------------------------------------------------------------------
+
+    def _on_player_error(self, monitor: int, message: str):
+        self._playing_button = None
+        self._cancel_transient_error()
+        self._display.show_error(message)
+
+    # ------------------------------------------------------------------
+    # Button / keyboard input
     # ------------------------------------------------------------------
 
     def _on_deck_press(self, key: int):
@@ -122,12 +165,11 @@ class App:
             self._display.stop()
             self._playing_button = None
             log.info("Button %d: stopped", key)
+            self._refresh_display()
         else:
             if not os.path.exists(video_path):
                 log.error("Video not found: %s", video_path)
-                self._show_transient_error(
-                    f"Video file not found:\n{btn.video}\n\nCheck the USB stick."
-                )
+                self._show_transient_error(f"Video file not found:\n{btn.video}\n\nCheck the USB stick.")
                 return
             if not self._display.play(btn.monitor, video_path):
                 self._show_transient_error(
@@ -137,6 +179,19 @@ class App:
             self._cancel_transient_error()
             self._playing_button = key
             log.info("Button %d: playing %s on monitor %d", key, video_path, btn.monitor)
+
+    # ------------------------------------------------------------------
+    # Display state
+    # ------------------------------------------------------------------
+
+    def _refresh_display(self):
+        """Show the appropriate persistent message, or clear if everything is fine."""
+        if not self._usb_ok:
+            self._display.show_error(_MSG_NO_USB)
+        elif not self._deck_connected:
+            self._display.show_error(_MSG_NO_DECK)
+        else:
+            self._display.clear_error()
 
     # ------------------------------------------------------------------
     # Transient errors (auto-clear after a few seconds)
@@ -154,30 +209,13 @@ class App:
 
     def _clear_transient_error(self):
         self._transient_timer = None
-        # Only clear if config is still loaded — don't overwrite a persistent USB error
-        if self._config is not None:
-            self._display.clear_error()
+        # Restore the correct persistent state rather than unconditionally clearing
+        self._refresh_display()
 
     def _cancel_transient_error(self):
         if self._transient_timer:
             self._transient_timer.cancel()
             self._transient_timer = None
-
-    # ------------------------------------------------------------------
-    # Quit
-    # ------------------------------------------------------------------
-
-    def _quit(self):
-        log.info("Quit requested — stopping service")
-        # Ask systemd to stop the service; systemd-stopped services don't auto-restart.
-        # If not running under systemd, fall back to a clean exit (systemd will restart it).
-        result = subprocess.run(
-            ["systemctl", "stop", _SYSTEMD_SERVICE],
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            log.warning("systemctl stop failed (not running under systemd?) — exiting directly")
-            self._stop.set()
 
     # ------------------------------------------------------------------
     # Deck layout
@@ -200,7 +238,6 @@ class App:
             )
             self._deck.set_key_image(idx, img)
 
-        # Render quit button on Stream Deck if configured
         quit_cfg = self._config.quit
         if quit_cfg and quit_cfg.stream_deck_button is not None:
             img = render_button(
@@ -211,6 +248,20 @@ class App:
                 label=quit_cfg.style.label,
             )
             self._deck.set_key_image(quit_cfg.stream_deck_button, img)
+
+    # ------------------------------------------------------------------
+    # Quit
+    # ------------------------------------------------------------------
+
+    def _quit(self):
+        log.info("Quit requested — stopping service")
+        result = subprocess.run(
+            ["systemctl", "stop", _SYSTEMD_SERVICE],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            log.warning("systemctl stop failed — exiting directly")
+            self._stop.set()
 
     # ------------------------------------------------------------------
     # Shutdown

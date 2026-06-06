@@ -213,16 +213,29 @@ sudo systemctl restart video-reinforcer
 
 ---
 
+## Error handling and recovery
+
+The app is designed to display a clear message on screen for every error state, and to recover automatically when the problem is resolved — no restart required.
+
+| Situation | What you see | Recovery |
+|---|---|---|
+| No USB stick | Error on all monitors, buttons dark | Insert USB stick |
+| Bad config.json | Error on all monitors, buttons dark | Fix config, re-insert USB stick |
+| USB replugged | Config reloads automatically | — |
+| Button pressed for disconnected monitor | 4-second error, then clears | Check cables or fix config.json |
+| Video file missing or unplayable | 4-second error, then clears | Check files on USB stick |
+| Monitor unplugged while running | Error on remaining monitors | Reconnect monitor |
+| Stream Deck unplugged | Error on all monitors | Reconnect Stream Deck — buttons relight automatically |
+
+---
+
 ## Troubleshooting
 
-**Both monitors show an error message**
+**Monitors show an error message**
+- The error message on screen will tell you the specific problem.
 - Check the USB stick is inserted and contains `config.json` at its root.
 - Check `config.json` is valid JSON (use a JSON validator on another PC).
-- Check that all video paths in `config.json` match files that actually exist on the USB stick.
-
-**Stream Deck buttons are all dark**
-- The USB stick may not be detected yet — wait a moment after inserting it.
-- Check logs: `journalctl -u video-reinforcer -f`
+- Check that all video and image paths in `config.json` match files that exist on the USB stick.
 
 **Video plays but no audio**
 - Ensure the monitor's volume is turned up.

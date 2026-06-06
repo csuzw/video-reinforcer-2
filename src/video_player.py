@@ -3,8 +3,9 @@ import logging
 import os
 import socket
 import subprocess
+import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 log = logging.getLogger(__name__)
 
@@ -18,13 +19,21 @@ CONNECTORS = {
 
 
 class VideoPlayer:
-    """Controls a single persistent mpv process assigned to one HDMI output."""
+    """Controls a persistent mpv process assigned to one HDMI output.
 
-    def __init__(self, monitor: int):
+    Fires on_error(monitor, message) if mpv exits unexpectedly (e.g. monitor
+    unplugged) or if a video fails to play (corrupt/unsupported file).
+    """
+
+    def __init__(self, monitor: int, on_error: Callable[[int, str], None]):
         self.monitor = monitor
+        self._on_error = on_error
         self._socket_path = _SOCKET_TEMPLATE.format(monitor=monitor)
         self._process: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
+        self._running = False
+        self._send_lock = threading.Lock()
+        self._loading = False  # True between loadfile command and playback-restart event
 
     def start(self):
         if os.path.exists(self._socket_path):
@@ -44,29 +53,37 @@ class VideoPlayer:
             f"--input-ipc-server={self._socket_path}",
         ]
         self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._running = True
 
-        # Wait up to 5 s for the IPC socket to appear
+        # Wait up to 5 s for IPC socket to appear
         for _ in range(50):
             if os.path.exists(self._socket_path):
                 break
             time.sleep(0.1)
         else:
             log.error("Monitor %d: mpv socket never appeared", self.monitor)
+            self._running = False
             return
 
         self._connect()
+        threading.Thread(target=self._reader, daemon=True, name=f"mpv-reader-{self.monitor}").start()
+        threading.Thread(target=self._watchdog, daemon=True, name=f"mpv-watchdog-{self.monitor}").start()
         log.info("Monitor %d player ready (connector=%s)", self.monitor, connector)
 
     def play(self, path: str):
+        self._loading = True
         self._send(["loadfile", path, "replace"])
         self._send(["set_property", "pause", False])
         log.info("Monitor %d: playing %s", self.monitor, path)
 
     def stop(self):
+        self._loading = False
         self._send(["stop"])
         log.info("Monitor %d: stopped", self.monitor)
 
     def shutdown(self):
+        self._running = False
+        self._loading = False
         self._close_socket()
         if self._process:
             self._process.terminate()
@@ -74,6 +91,55 @@ class VideoPlayer:
                 self._process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._process.kill()
+
+    # ------------------------------------------------------------------
+    # Background threads
+    # ------------------------------------------------------------------
+
+    def _watchdog(self):
+        """Fires on_error if mpv exits without being told to."""
+        if self._process:
+            self._process.wait()
+        if self._running:
+            self._running = False
+            log.error("Monitor %d: mpv exited unexpectedly (monitor disconnected?)", self.monitor)
+            self._on_error(self.monitor, f"Monitor {self.monitor} lost.\nCheck the HDMI cable.")
+
+    def _reader(self):
+        """Reads JSON events from mpv IPC and detects playback failures."""
+        buf = ""
+        while self._running and self._sock:
+            try:
+                chunk = self._sock.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    line = line.strip()
+                    if line:
+                        try:
+                            self._handle_event(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+            except OSError:
+                break
+
+    def _handle_event(self, msg: dict):
+        event = msg.get("event")
+        if event == "end-file":
+            reason = msg.get("reason", "")
+            if reason == "error" and self._running and self._loading:
+                self._loading = False
+                log.error("Monitor %d: mpv reported end-file error", self.monitor)
+                self._on_error(
+                    self.monitor,
+                    "Video could not be played.\nThe file may be corrupt or in an unsupported format."
+                )
+            else:
+                self._loading = False
+        elif event == "playback-restart":
+            self._loading = False
 
     # ------------------------------------------------------------------
     # IPC helpers
@@ -84,22 +150,19 @@ class VideoPlayer:
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             sock.connect(self._socket_path)
-            sock.settimeout(2.0)
             self._sock = sock
         except Exception as e:
             log.error("Monitor %d: socket connect failed: %s", self.monitor, e)
 
     def _send(self, command: list):
-        if self._sock is None:
-            self._connect()
-        if self._sock is None:
-            return
-        try:
-            msg = json.dumps({"command": command}) + "\n"
-            self._sock.sendall(msg.encode())
-        except Exception as e:
-            log.warning("Monitor %d: IPC send failed (%s), reconnecting", self.monitor, e)
-            self._sock = None
+        with self._send_lock:
+            if not self._sock:
+                return
+            try:
+                self._sock.sendall((json.dumps({"command": command}) + "\n").encode())
+            except Exception as e:
+                log.warning("Monitor %d: IPC send failed: %s", self.monitor, e)
+                self._sock = None
 
     def _close_socket(self):
         if self._sock:
