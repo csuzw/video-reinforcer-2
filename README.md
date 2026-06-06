@@ -169,6 +169,32 @@ sudo bash install/setup.sh
 
 ---
 
+## Running the tests
+
+The test suite covers config parsing, button rendering, display logic, and the full app state machine. Tests run on the Pi without any hardware connected — all hardware components (mpv, Stream Deck, USB mounting) are mocked out.
+
+```bash
+# Install dev dependencies (once)
+pip3 install -r requirements-dev.txt
+
+# Run all tests
+cd /path/to/video-reinforcer-2
+python3 -m pytest tests/ -v
+```
+
+Example output:
+
+```
+tests/test_config_loader.py::TestParseButtons::test_minimal_valid_config PASSED
+tests/test_config_loader.py::TestParseButtons::test_missing_buttons_section PASSED
+...
+tests/test_main.py::TestDeckEvents::test_deck_disconnect_during_playing_does_not_interrupt PASSED
+```
+
+The tests do **not** require a USB stick, Stream Deck, monitors, or videos to be present.
+
+---
+
 ## Updating videos or button config
 
 No app update needed — just edit the files on the USB stick from any PC, then re-insert it into the Pi. The app detects the replug and reloads automatically.
