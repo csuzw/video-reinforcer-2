@@ -5,6 +5,8 @@ import subprocess
 import threading
 from typing import Dict, Optional
 
+_TRANSIENT_ERROR_DURATION = 4.0  # seconds
+
 from .button_renderer import render_blank, render_button
 from .config_loader import AppConfig, ConfigError, QuitConfig, load_config
 from .deck_manager import DeckManager
@@ -35,6 +37,7 @@ class App:
             on_unmounted=self._on_usb_unmounted,
         )
         self._stop = threading.Event()
+        self._transient_timer: Optional[threading.Timer] = None
 
     def run(self):
         log.info("Video Reinforcer starting")
@@ -79,6 +82,7 @@ class App:
 
     def _on_usb_unmounted(self):
         log.info("USB removed")
+        self._cancel_transient_error()
         self._config = None
         self._playing_button = None
         self._key_map = {}
@@ -114,16 +118,50 @@ class App:
         video_path = btn.video_path()
 
         if self._playing_button == key:
+            self._cancel_transient_error()
             self._display.stop()
             self._playing_button = None
             log.info("Button %d: stopped", key)
         else:
             if not os.path.exists(video_path):
                 log.error("Video not found: %s", video_path)
+                self._show_transient_error(
+                    f"Video file not found:\n{btn.video}\n\nCheck the USB stick."
+                )
                 return
-            self._display.play(btn.monitor, video_path)
+            if not self._display.play(btn.monitor, video_path):
+                self._show_transient_error(
+                    f"Monitor {btn.monitor} is not connected.\nCheck cables and config.json."
+                )
+                return
+            self._cancel_transient_error()
             self._playing_button = key
             log.info("Button %d: playing %s on monitor %d", key, video_path, btn.monitor)
+
+    # ------------------------------------------------------------------
+    # Transient errors (auto-clear after a few seconds)
+    # ------------------------------------------------------------------
+
+    def _show_transient_error(self, message: str):
+        self._cancel_transient_error()
+        self._playing_button = None
+        self._display.show_error(message)
+        self._transient_timer = threading.Timer(
+            _TRANSIENT_ERROR_DURATION, self._clear_transient_error
+        )
+        self._transient_timer.daemon = True
+        self._transient_timer.start()
+
+    def _clear_transient_error(self):
+        self._transient_timer = None
+        # Only clear if config is still loaded — don't overwrite a persistent USB error
+        if self._config is not None:
+            self._display.clear_error()
+
+    def _cancel_transient_error(self):
+        if self._transient_timer:
+            self._transient_timer.cancel()
+            self._transient_timer = None
 
     # ------------------------------------------------------------------
     # Quit
@@ -180,6 +218,7 @@ class App:
 
     def _shutdown(self):
         log.info("Shutting down")
+        self._cancel_transient_error()
         self._keyboard.stop()
         self._usb.stop()
         self._display.shutdown()

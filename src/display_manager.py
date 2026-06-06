@@ -58,14 +58,19 @@ class DisplayManager:
     # Playback control
     # ------------------------------------------------------------------
 
-    def play(self, monitor: int, path: str):
-        """Stop anything currently playing (any monitor), start video on target monitor."""
-        if monitor not in self._players:
-            log.warning("Monitor %d is not connected — ignoring play request", monitor)
-            return
+    def play(self, monitor: int, path: str) -> bool:
+        """Stop anything currently playing (any monitor), start video on target monitor.
+
+        Returns False if the monitor is not connected (and no video is started).
+        If the monitor was plugged in after startup, a player is started on demand.
+        """
+        if monitor not in self._players and not self._try_add_monitor(monitor):
+            log.warning("Monitor %d is not connected", monitor)
+            return False
         self._stop_all_players()
         self._playing_monitor = monitor
         self._players[monitor].play(path)
+        return True
 
     def stop(self):
         """Stop the currently playing video and blank its monitor."""
@@ -105,6 +110,24 @@ class DisplayManager:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _try_add_monitor(self, monitor: int) -> bool:
+        """Check whether a monitor has been connected since startup and, if so, start a player for it."""
+        connector = CONNECTORS.get(monitor)
+        if not connector:
+            return False
+        pattern = f"/sys/class/drm/card*-{connector}/status"
+        for path in glob.glob(pattern):
+            try:
+                if open(path).read().strip() == "connected":
+                    log.info("Monitor %d connected since startup — starting player", monitor)
+                    player = VideoPlayer(monitor)
+                    player.start()
+                    self._players[monitor] = player
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _stop_all_players(self):
         for player in self._players.values():
