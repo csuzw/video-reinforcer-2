@@ -25,8 +25,7 @@ _MSG_NO_USB = (
 )
 _MSG_NO_DECK = (
     "Stream Deck disconnected.\n"
-    "Please reconnect it.\n"
-    "(Keyboard input is still active.)"
+    "Please reconnect it."
 )
 
 
@@ -119,9 +118,9 @@ class App:
     def _on_deck_disconnected(self):
         log.info("Stream Deck disconnected")
         self._deck_connected = False
-        # Only show the deck error if USB is OK (USB error takes priority)
         if self._usb_ok and self._playing_button is None:
-            self._display.show_error(_MSG_NO_DECK)
+            if self._config and self._config.requires_deck():
+                self._display.show_error(_MSG_NO_DECK)
 
     # ------------------------------------------------------------------
     # Player errors (monitor unplugged, video unplayable)
@@ -188,7 +187,7 @@ class App:
         """Show the appropriate persistent message, or clear if everything is fine."""
         if not self._usb_ok:
             self._display.show_error(_MSG_NO_USB)
-        elif not self._deck_connected:
+        elif not self._deck_connected and self._config and self._config.requires_deck():
             self._display.show_error(_MSG_NO_DECK)
         else:
             self._display.clear_error()

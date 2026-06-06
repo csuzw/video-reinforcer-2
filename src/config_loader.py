@@ -53,6 +53,15 @@ class AppConfig:
         """Map normalized key name → button index for quick lookup."""
         return {btn.key: idx for idx, btn in self.buttons.items() if btn.key}
 
+    def requires_deck(self) -> bool:
+        """True if any action can only be triggered via Stream Deck (no keyboard key)."""
+        for btn in self.buttons.values():
+            if btn.key is None:
+                return True
+        if self.quit and self.quit.stream_deck_button is not None and self.quit.key is None:
+            return True
+        return False
+
 
 def load_config() -> AppConfig:
     config_path = os.path.join(USB_MOUNT, CONFIG_FILE)

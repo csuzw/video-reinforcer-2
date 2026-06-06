@@ -222,7 +222,9 @@ class TestDeckEvents:
         app._on_deck_disconnected()
         assert app._deck_connected is False
 
-    def test_deck_disconnect_shows_error_when_idle(self, app):
+    def test_deck_disconnect_shows_error_when_deck_required(self, app):
+        """Deck error shown when config has a button with no keyboard key."""
+        app._config = _parse(_TWO_BUTTON_CONFIG)  # button 1 has no key → requires deck
         app._usb_ok = True
         app._deck_connected = True
         app._playing_button = None
@@ -230,6 +232,23 @@ class TestDeckEvents:
         app._on_deck_disconnected()
 
         app._display.show_error.assert_called()
+
+    def test_deck_disconnect_no_error_when_deck_not_required(self, app):
+        """No error when every button and quit also has a keyboard key."""
+        keyboard_only = {
+            "buttons": {
+                "0": {"video": "v1.mp4", "key": "1", "button": {"type": "color", "color": "#FF0000"}},
+                "1": {"video": "v2.mp4", "key": "2", "button": {"type": "color", "color": "#0000FF"}},
+            }
+        }
+        app._config = _parse(keyboard_only)
+        app._usb_ok = True
+        app._deck_connected = True
+        app._playing_button = None
+
+        app._on_deck_disconnected()
+
+        app._display.show_error.assert_not_called()
 
     def test_deck_disconnect_during_playing_does_not_interrupt(self, app):
         """Critical: a video reward must not be interrupted by a deck disconnect."""

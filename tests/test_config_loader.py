@@ -164,6 +164,51 @@ class TestQuitConfig:
 
 
 # ---------------------------------------------------------------------------
+# requires_deck()
+# ---------------------------------------------------------------------------
+
+class TestRequiresDeck:
+    def test_requires_deck_when_button_has_no_key(self):
+        config = _parse({"buttons": {
+            "0": {"video": "v1.mp4", "key": "1"},
+            "1": {"video": "v2.mp4"},  # no key → only reachable via deck
+        }})
+        assert config.requires_deck() is True
+
+    def test_does_not_require_deck_when_all_buttons_have_keys(self):
+        config = _parse({"buttons": {
+            "0": {"video": "v1.mp4", "key": "1"},
+            "1": {"video": "v2.mp4", "key": "2"},
+        }})
+        assert config.requires_deck() is False
+
+    def test_requires_deck_when_quit_has_deck_button_but_no_key(self):
+        config = _parse({
+            "quit": {"stream_deck_button": 5},
+            "buttons": {"0": {"video": "v.mp4", "key": "1"}},
+        })
+        assert config.requires_deck() is True
+
+    def test_does_not_require_deck_when_quit_has_both(self):
+        config = _parse({
+            "quit": {"stream_deck_button": 5, "key": "q"},
+            "buttons": {"0": {"video": "v.mp4", "key": "1"}},
+        })
+        assert config.requires_deck() is False
+
+    def test_does_not_require_deck_when_quit_key_only(self):
+        config = _parse({
+            "quit": {"key": "q"},
+            "buttons": {"0": {"video": "v.mp4", "key": "1"}},
+        })
+        assert config.requires_deck() is False
+
+    def test_does_not_require_deck_with_no_quit(self):
+        config = _parse({"buttons": {"0": {"video": "v.mp4", "key": "1"}}})
+        assert config.requires_deck() is False
+
+
+# ---------------------------------------------------------------------------
 # Path helpers on ButtonConfig
 # ---------------------------------------------------------------------------
 
