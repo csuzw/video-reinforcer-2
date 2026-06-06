@@ -66,6 +66,7 @@ class TestUSBEvents:
         assert len(app._config.buttons) == 2
 
     def test_valid_config_clears_error_screen(self, app):
+        app._deck_connected = True  # deck already connected, so error screen should clear
         with patch("src.main.load_config", return_value=_parse(_TWO_BUTTON_CONFIG)):
             app._on_usb_mounted()
         app._display.clear_error.assert_called()
