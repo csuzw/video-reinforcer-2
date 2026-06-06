@@ -2,6 +2,7 @@
 Description=labwc Wayland compositor (Video Reinforcer kiosk)
 After=local-fs.target udev.service seatd.service
 Wants=udev.service seatd.service
+Conflicts=lightdm.service gdm.service gdm3.service sddm.service xdm.service lxdm.service
 
 [Service]
 Type=simple
@@ -20,6 +21,8 @@ Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
 # The logind backend times out when labwc runs as a systemd service with
 # no active logind session; seatd has no such constraint.
 Environment=LIBSEAT_BACKEND=seatd
+# Zero cursor size makes the compositor cursor invisible (kiosk mode)
+Environment=XCURSOR_SIZE=0
 RuntimeDirectory=labwc
 RuntimeDirectoryMode=0755
 ExecStart=/usr/bin/labwc -C /opt/video-reinforcer/labwc
