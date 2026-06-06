@@ -64,6 +64,7 @@ class VideoPlayer:
             "--really-quiet",
             "--idle=yes",
             "--pause",
+            "--cursor-autohide=always",
             f"--input-ipc-server={self._socket_path}",
         ]
         if audio_device:
