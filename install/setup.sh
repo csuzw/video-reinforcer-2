@@ -17,7 +17,9 @@ apt-get install -y \
     python3-dev \
     libhidapi-libusb0 \
     libudev-dev \
-    fonts-dejavu-core
+    fonts-dejavu-core \
+    gcc \
+    libdrm-dev
 
 # ---- Mount point ----
 mkdir -p "$MOUNT_POINT"
@@ -40,6 +42,12 @@ cp "$APP_SRC/requirements.txt" "$APP_DIR/"
 # ---- Python dependencies ----
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+
+# ---- DRM lease shim (LD_PRELOAD; lets two mpv processes share card1 via leases) ----
+gcc -shared -fPIC -O2 -o "$APP_DIR/libdrm_lease_shim.so" \
+    "$SCRIPT_DIR/libdrm_lease_shim.c" -ldl \
+    && echo "DRM lease shim compiled OK" \
+    || echo "WARNING: DRM lease shim compilation failed — dual monitor may not work"
 
 # ---- Blank video for OSD error display ----
 # mpv --vo=drm requires audio+video; this 1-second loop is the silent black background

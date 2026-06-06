@@ -53,6 +53,7 @@ class VideoPlayer:
             "mpv",
             "--vo=drm",
             f"--drm-connector={connector}",
+            "--drm-device=/dev/dri/card1",
             "--loop-file=inf",
             "--fullscreen",
             "--no-terminal",
@@ -61,13 +62,17 @@ class VideoPlayer:
             "--pause",
             f"--input-ipc-server={self._socket_path}",
         ]
-        if lease_fd is not None:
-            cmd.append(f"--drm-device=/proc/self/fd/{lease_fd}")
         if audio_device:
             cmd.append(f"--audio-device={audio_device}")
 
         popen_kwargs: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
         if lease_fd is not None:
+            # LD_PRELOAD shim intercepts open("/dev/dri/...") and returns
+            # dup(lease_fd) so mpv uses the DRM lease fd directly.
+            env = os.environ.copy()
+            env["LD_PRELOAD"] = "/opt/video-reinforcer/libdrm_lease_shim.so"
+            env["DRM_LEASE_FD"] = str(lease_fd)
+            popen_kwargs["env"] = env
             popen_kwargs["pass_fds"] = (lease_fd,)
         self._process = subprocess.Popen(cmd, **popen_kwargs)
         self._running = True
