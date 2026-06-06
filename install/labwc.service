@@ -16,6 +16,9 @@ Environment=WLR_DRM_DEVICES=/dev/dri/card1
 Environment=WLR_DRM_FORCE_LIBLIFTOFF=1
 # Keep compositor running even with no physical outputs connected
 Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
+# Bypass logind/seatd session management — use DRM/input devices directly.
+# Required when running as a systemd service with no active login session.
+Environment=LIBSEAT_BACKEND=direct
 RuntimeDirectory=labwc
 RuntimeDirectoryMode=0755
 ExecStart=/usr/bin/labwc -C /opt/video-reinforcer/labwc

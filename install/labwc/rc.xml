@@ -5,14 +5,13 @@
     Minimal labwc config for the Video Reinforcer kiosk.
 
     Window rules move each mpv instance to its designated HDMI output and
-    fullscreen it.  MoveToOutput must fire before ToggleFullscreen because
+    fullscreen it. MoveToOutput must fire before ToggleFullscreen because
     labwc refuses to move a window that is already in fullscreen state.
 
-    mpv is therefore started WITHOUT --fullscreen; labwc applies both
-    actions when the window first appears.
+    mpv is therefore started WITHOUT the fullscreen flag; labwc applies
+    both actions when the window first appears.
 
-    matchOnce="true" so the rule only fires on first map, not on every
-    focus or re-raise.
+    matchOnce="true" so the rule only fires on first map.
   -->
 
   <windowRules>
