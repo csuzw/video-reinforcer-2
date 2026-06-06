@@ -206,10 +206,9 @@ class TestKeyboardInput:
     def test_quit_key_calls_quit(self, app):
         with patch("src.main.load_config", return_value=_parse(_QUIT_CONFIG)):
             app._on_usb_mounted()
-        with patch("src.main.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
+        with patch.object(app, "_quit") as mock_quit:
             app._on_key("f12")
-        mock_run.assert_called_once()
+        mock_quit.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
