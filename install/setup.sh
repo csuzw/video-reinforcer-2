@@ -56,7 +56,9 @@ ffmpeg -y \
 # Detect the running display manager by name before disabling it so quit can restore it.
 DM_ID=""
 for DM in lightdm gdm gdm3 sddm xdm lxdm; do
-    if systemctl is-active --quiet "$DM" 2>/dev/null; then
+    # Accept active (fresh install) or disabled (re-run after prior setup)
+    if systemctl is-active --quiet "$DM" 2>/dev/null || \
+       systemctl list-unit-files "${DM}.service" 2>/dev/null | grep -qE "enabled|disabled"; then
         DM_ID="${DM}.service"
         break
     fi
