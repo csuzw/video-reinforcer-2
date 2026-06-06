@@ -14,6 +14,7 @@ apt-get update
 apt-get install -y \
     mpv \
     labwc \
+    seatd \
     python3-pip \
     python3-dev \
     libhidapi-libusb0 \
@@ -99,9 +100,11 @@ cp "$SCRIPT_DIR/labwc/rc.xml" "$APP_DIR/labwc/rc.xml"
 cp "$SCRIPT_DIR/labwc.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/video-reinforcer.service" /etc/systemd/system/
 systemctl daemon-reload
+systemctl enable seatd
 systemctl enable labwc
 systemctl enable "$SERVICE"
-# Start labwc first, then the app (which depends on it)
+# Start in dependency order; labwc waits for seatd, app waits for labwc
+systemctl restart seatd
 systemctl restart labwc
 systemctl restart "$SERVICE"
 
