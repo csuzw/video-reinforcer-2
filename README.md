@@ -9,12 +9,12 @@ A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato
 | Component | Requirement |
 |---|---|
 | **Pi model** | Raspberry Pi 5 only |
-| **Operating system** | Raspberry Pi OS Bookworm (64-bit) — Lite or Desktop |
+| **Operating system** | Any 64-bit Linux with labwc, seatd, mpv, systemd, and Python 3 |
 | **Monitors** | Up to 2, connected via micro-HDMI; audio delivered over HDMI |
 | **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
 | **Config/video storage** | USB stick |
 
-The app has not been tested on earlier Pi models or other Linux distributions.
+The app itself has no OS-specific code. The Pi 5 requirement comes from the hardware: the audio device names, DRM card assignment, and DRM plane allocation flags are all Pi 5-specific. The provided setup script (`install/setup.sh`) uses `apt-get` and is written for Debian-based distributions (Raspberry Pi OS, Ubuntu, etc.). On other package managers the dependencies would need to be installed manually before running the app.
 
 ---
 
@@ -139,13 +139,14 @@ Key names are case-insensitive. Common values:
 
 ## Installation
 
-### 1. Flash Raspberry Pi OS Bookworm (64-bit)
+### 1. Install a 64-bit Linux OS
 
-Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/). When prompted:
+The easiest option is [Raspberry Pi OS](https://www.raspberrypi.com/software/) (Lite or Desktop, 64-bit), flashed with Raspberry Pi Imager. When prompted:
 
-- Choose **Raspberry Pi OS Lite (64-bit)** or **Raspberry Pi OS (64-bit)** — both work
 - **Enable SSH** in the advanced options
 - Set a hostname, username, and password
+
+Any other 64-bit Linux distribution works provided `labwc`, `seatd`, `mpv`, `ffmpeg`, `python3`, and `libhidapi` are available.
 
 ### 2. Clone and run setup
 
