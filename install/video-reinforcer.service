@@ -8,7 +8,6 @@ Wants=udev.service
 Type=simple
 User=root
 WorkingDirectory=/opt/video-reinforcer
-ExecStartPre=-/bin/sh -c 'printf "\033[?25l" > /dev/tty1 2>/dev/null; printf "\033[?25l" > /dev/tty2 2>/dev/null'
 ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
 Restart=on-failure
 RestartSec=5
