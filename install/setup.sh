@@ -53,13 +53,22 @@ ffmpeg -y \
 
 # ---- Disable desktop display manager (conflicts with DRM video output) ----
 # The app uses mpv --vo=drm which needs exclusive display access.
-# Save the active display manager name first so quit can restore it.
-DM_ID=$(systemctl show -p Id display-manager.service 2>/dev/null | cut -d= -f2)
+# Detect the running display manager by name before disabling it so quit can restore it.
+DM_ID=""
+for DM in lightdm gdm gdm3 sddm xdm lxdm; do
+    if systemctl is-active --quiet "$DM" 2>/dev/null; then
+        DM_ID="${DM}.service"
+        break
+    fi
+done
 if [ -n "$DM_ID" ]; then
     echo "$DM_ID" > "$APP_DIR/display-manager"
     echo "Detected display manager: $DM_ID"
+else
+    rm -f "$APP_DIR/display-manager"
+    echo "No display manager detected (terminal-only setup)"
 fi
-systemctl disable --now lightdm gdm sddm 2>/dev/null || true
+systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
 # ---- Disable console blanking (keeps DRM state clean) ----
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
