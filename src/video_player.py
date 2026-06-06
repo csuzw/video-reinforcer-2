@@ -91,7 +91,7 @@ class VideoPlayer:
         self._send(["set_property", "osd-border-color", "#000000"])
         self._send(["set_property", "osd-border-size", 2])
         self._show_watermark()
-        log.info("Monitor %d player ready (connector=%s)", self.monitor, connector)
+        log.info("Monitor %d player ready (app-id=mpv-mon-%d)", self.monitor, self.monitor)
 
     def play(self, path: str):
         self._loading = True
