@@ -51,6 +51,11 @@ ffmpeg -y \
     -c:a aac -b:a 32k -shortest \
     "$APP_DIR/blank.mp4"
 
+# ---- Disable desktop display manager (conflicts with DRM video output) ----
+# The app uses mpv --vo=drm which needs exclusive display access.
+# If a display manager (lightdm, gdm, etc.) is running it holds the DRM device.
+systemctl disable --now lightdm gdm sddm 2>/dev/null || true
+
 # ---- Disable console blanking (keeps DRM state clean) ----
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
