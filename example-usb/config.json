@@ -1,8 +1,18 @@
 {
+  "quit": {
+    "stream_deck_button": 5,
+    "key": "F12",
+    "button": {
+      "type": "color",
+      "color": "#CC0000",
+      "label": "QUIT"
+    }
+  },
   "buttons": {
     "0": {
       "video": "videos/reward1.mp4",
       "monitor": 1,
+      "key": "F1",
       "button": {
         "type": "color",
         "color": "#E63946",
@@ -12,6 +22,7 @@
     "1": {
       "video": "videos/reward2.mp4",
       "monitor": 2,
+      "key": "F2",
       "button": {
         "type": "color",
         "color": "#457B9D",
@@ -21,6 +32,7 @@
     "2": {
       "video": "videos/reward3.mp4",
       "monitor": 1,
+      "key": "F3",
       "button": {
         "type": "image",
         "image": "button-images/stars.png",
