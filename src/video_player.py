@@ -18,6 +18,12 @@ CONNECTORS = {
     2: "HDMI-A-2",
 }
 
+# ALSA audio devices matching each HDMI port (vc4hdmi0 = HDMI-A-1, vc4hdmi1 = HDMI-A-2)
+AUDIO_DEVICES = {
+    1: "alsa/plughw:CARD=vc4hdmi0,DEV=0",
+    2: "alsa/plughw:CARD=vc4hdmi1,DEV=0",
+}
+
 
 class VideoPlayer:
     """Controls a persistent mpv process assigned to one HDMI output.
@@ -41,6 +47,7 @@ class VideoPlayer:
             os.remove(self._socket_path)
 
         connector = CONNECTORS.get(self.monitor, f"HDMI-A-{self.monitor}")
+        audio_device = AUDIO_DEVICES.get(self.monitor)
         cmd = [
             "mpv",
             "--vo=drm",
@@ -53,6 +60,8 @@ class VideoPlayer:
             "--pause",
             f"--input-ipc-server={self._socket_path}",
         ]
+        if audio_device:
+            cmd.append(f"--audio-device={audio_device}")
         self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._running = True
 
