@@ -15,8 +15,8 @@ from .usb_monitor import USBMonitor
 log = logging.getLogger(__name__)
 
 USB_MOUNT = "/mnt/vr-usb"
-_SYSTEMD_SERVICE = "video-reinforcer"
 _TRANSIENT_ERROR_DURATION = 4.0  # seconds before auto-clearing a transient error
+_DISPLAY_MANAGER_FILE = "/opt/video-reinforcer/display-manager"
 
 _MSG_NO_USB = (
     "No USB stick detected.\n"
@@ -253,14 +253,19 @@ class App:
     # ------------------------------------------------------------------
 
     def _quit(self):
-        log.info("Quit requested — stopping service")
-        result = subprocess.run(
-            ["systemctl", "stop", _SYSTEMD_SERVICE],
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            log.warning("systemctl stop failed — exiting directly")
-            self._stop.set()
+        log.info("Quit requested — exiting")
+        self._restore_display_manager()
+        self._stop.set()
+
+    def _restore_display_manager(self):
+        try:
+            with open(_DISPLAY_MANAGER_FILE) as f:
+                dm = f.read().strip()
+            if dm:
+                log.info("Starting display manager: %s", dm)
+                subprocess.Popen(["systemctl", "start", dm])
+        except FileNotFoundError:
+            pass  # no display manager was configured; terminal stays
 
     # ------------------------------------------------------------------
     # Shutdown

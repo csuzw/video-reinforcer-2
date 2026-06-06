@@ -53,7 +53,12 @@ ffmpeg -y \
 
 # ---- Disable desktop display manager (conflicts with DRM video output) ----
 # The app uses mpv --vo=drm which needs exclusive display access.
-# If a display manager (lightdm, gdm, etc.) is running it holds the DRM device.
+# Save the active display manager name first so quit can restore it.
+DM_ID=$(systemctl show -p Id display-manager.service 2>/dev/null | cut -d= -f2)
+if [ -n "$DM_ID" ]; then
+    echo "$DM_ID" > "$APP_DIR/display-manager"
+    echo "Detected display manager: $DM_ID"
+fi
 systemctl disable --now lightdm gdm sddm 2>/dev/null || true
 
 # ---- Disable console blanking (keeps DRM state clean) ----

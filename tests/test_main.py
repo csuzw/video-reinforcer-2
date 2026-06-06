@@ -347,18 +347,22 @@ class TestTransientErrors:
 # ---------------------------------------------------------------------------
 
 class TestQuit:
-    def test_quit_calls_systemctl_stop(self, app):
-        with patch("src.main.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            app._quit()
-        mock_run.assert_called_once()
-        assert "stop" in mock_run.call_args[0][0]
-
-    def test_quit_falls_back_to_stop_event_if_systemctl_fails(self, app):
-        with patch("src.main.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1)
+    def test_quit_sets_stop_event(self, app):
+        with patch("builtins.open", side_effect=FileNotFoundError):
             app._quit()
         assert app._stop.is_set()
+
+    def test_quit_starts_saved_display_manager(self, app):
+        with patch("builtins.open", return_value=__import__("io").StringIO("lightdm.service")), \
+             patch("src.main.subprocess.Popen") as mock_popen:
+            app._quit()
+        mock_popen.assert_called_once_with(["systemctl", "start", "lightdm.service"])
+
+    def test_quit_does_not_start_display_manager_when_file_missing(self, app):
+        with patch("builtins.open", side_effect=FileNotFoundError), \
+             patch("src.main.subprocess.Popen") as mock_popen:
+            app._quit()
+        mock_popen.assert_not_called()
 
     def test_quit_button_on_deck_triggers_quit(self, app):
         with patch("src.main.load_config", return_value=_parse(_QUIT_CONFIG)):
