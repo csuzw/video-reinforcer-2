@@ -8,6 +8,10 @@ Wants=udev.service
 Type=simple
 User=root
 WorkingDirectory=/opt/video-reinforcer
+# Switch to VT2 before starting so the kernel releases DRM master from the
+# VT system.  This allows both mpv processes to sequentially acquire and
+# release DRM master for their initial modeset, enabling dual-HDMI output.
+ExecStartPre=-/bin/chvt 2
 ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
 Restart=on-failure
 RestartSec=5

@@ -17,9 +17,7 @@ apt-get install -y \
     python3-dev \
     libhidapi-libusb0 \
     libudev-dev \
-    fonts-dejavu-core \
-    gcc \
-    libdrm-dev
+    fonts-dejavu-core
 
 # ---- Mount point ----
 mkdir -p "$MOUNT_POINT"
@@ -42,12 +40,6 @@ cp "$APP_SRC/requirements.txt" "$APP_DIR/"
 # ---- Python dependencies ----
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-
-# ---- DRM lease shim (LD_PRELOAD; lets two mpv processes share card1 via leases) ----
-gcc -shared -fPIC -O2 -o "$APP_DIR/libdrm_lease_shim.so" \
-    "$SCRIPT_DIR/libdrm_lease_shim.c" -ldl \
-    && echo "DRM lease shim compiled OK" \
-    || echo "WARNING: DRM lease shim compilation failed — dual monitor may not work"
 
 # ---- Blank video for OSD error display ----
 # mpv --vo=drm requires audio+video; this 1-second loop is the silent black background
@@ -90,13 +82,14 @@ fi
 if ! grep -q "vt.global_cursor_default=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ vt.global_cursor_default=0/' /boot/firmware/cmdline.txt
 fi
-# Redirect fbcon to a non-existent framebuffer so it has nowhere to display.
-# mpv uses KMS directly and is unaffected; this prevents fbcon from overlaying
-# the console on either HDMI output.
-if ! grep -q "fbcon=map:1" /boot/firmware/cmdline.txt 2>/dev/null; then
-    sed -i 's/ drm.fbdev_emulation=0//' /boot/firmware/cmdline.txt  # remove if previously added
-    sed -i 's/$/ fbcon=map:1/' /boot/firmware/cmdline.txt
-fi
+# Remove fbcon=map:1 if previously added — it breaks dual-monitor DRM master handoff
+sed -i 's/ fbcon=map:1//' /boot/firmware/cmdline.txt 2>/dev/null || true
+
+# ---- Mask getty@tty2 ----
+# The service switches to VT2 (chvt 2) on start to allow both mpv processes to
+# claim DRM master sequentially.  Without this, a login prompt would appear on
+# monitor 2 after the VT switch.
+systemctl mask getty@tty2
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
 mkdir -p /etc/systemd/system/getty@tty1.service.d
