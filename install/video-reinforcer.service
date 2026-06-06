@@ -8,7 +8,7 @@ Wants=udev.service
 Type=simple
 User=root
 WorkingDirectory=/opt/video-reinforcer
-ExecStart=/usr/bin/python3 -m src.main
+ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
 Restart=always
 RestartSec=5
 # Give mpv time to claim DRM connectors on restart

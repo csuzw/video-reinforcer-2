@@ -38,7 +38,8 @@ cp -r "$APP_SRC/src" "$APP_DIR/"
 cp "$APP_SRC/requirements.txt" "$APP_DIR/"
 
 # ---- Python dependencies ----
-pip3 install -r "$APP_DIR/requirements.txt"
+python3 -m venv "$APP_DIR/venv"
+"$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
 # ---- Disable console blanking (keeps DRM state clean) ----
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
