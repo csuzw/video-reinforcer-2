@@ -41,6 +41,16 @@ cp "$APP_SRC/requirements.txt" "$APP_DIR/"
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
+# ---- Blank video for OSD error display ----
+# mpv --vo=drm requires audio+video; this 1-second loop is the silent black background
+# that error messages are overlaid on via OSD.
+ffmpeg -y \
+    -f lavfi -i "color=black:size=1920x1080:rate=1" \
+    -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" \
+    -t 1 -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p \
+    -c:a aac -b:a 32k -shortest \
+    "$APP_DIR/blank.mp4"
+
 # ---- Disable console blanking (keeps DRM state clean) ----
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt

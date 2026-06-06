@@ -10,6 +10,7 @@ from typing import Callable, Optional
 log = logging.getLogger(__name__)
 
 _SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
+_BLANK_VIDEO = "/opt/video-reinforcer/blank.mp4"
 
 # DRM connector names on Pi 5 — HDMI-A-1 is the first port (closest to USB-C power)
 CONNECTORS = {
@@ -68,6 +69,11 @@ class VideoPlayer:
         self._connect()
         threading.Thread(target=self._reader, daemon=True, name=f"mpv-reader-{self.monitor}").start()
         threading.Thread(target=self._watchdog, daemon=True, name=f"mpv-watchdog-{self.monitor}").start()
+        # Style OSD text used for error messages
+        self._send(["set_property", "osd-font-size", 52])
+        self._send(["set_property", "osd-color", "#D23C3C"])
+        self._send(["set_property", "osd-border-color", "#000000"])
+        self._send(["set_property", "osd-border-size", 2])
         log.info("Monitor %d player ready (connector=%s)", self.monitor, connector)
 
     def play(self, path: str):
@@ -80,6 +86,23 @@ class VideoPlayer:
         self._loading = False
         self._send(["stop"])
         log.info("Monitor %d: stopped", self.monitor)
+
+    def show_error_text(self, message: str):
+        """Display error message via mpv OSD overlaid on a black background.
+
+        Loads a pre-generated silent black video so mpv renders frames
+        (OSD requires active rendering). {\\an5} centres the text on screen.
+        """
+        self._loading = False  # cancel any in-progress video load
+        self._send(["loadfile", _BLANK_VIDEO, "replace"])
+        self._send(["set_property", "pause", False])
+        self._send(["show-text", "{\\an5}" + message, 2147483647])
+        log.info("Monitor %d: showing error", self.monitor)
+
+    def clear_error_text(self):
+        """Clear OSD error text and return to a blank screen."""
+        self._send(["show-text", "", 1])
+        self.stop()
 
     def shutdown(self):
         self._running = False

@@ -1,22 +1,11 @@
 import glob
 import logging
-import os
-import subprocess
-import tempfile
 import threading
 from typing import Callable, Dict, List, Optional
-
-from PIL import Image, ImageDraw, ImageFont
 
 from .video_player import CONNECTORS, VideoPlayer
 
 log = logging.getLogger(__name__)
-
-_ERROR_RESOLUTION = (1920, 1080)
-_ERROR_BG = (20, 20, 20)
-_ERROR_FG = (210, 60, 60)
-_ERROR_FONT_SIZE = 42
-_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
 def _detect_connected_monitors() -> List[int]:
@@ -46,7 +35,6 @@ class DisplayManager:
         self._players: Dict[int, VideoPlayer] = {}
         self._lock = threading.Lock()
         self._playing_monitor: Optional[int] = None
-        self._tmp_files: list[str] = []
 
     def start(self):
         connected = _detect_connected_monitors()
@@ -90,18 +78,19 @@ class DisplayManager:
     # ------------------------------------------------------------------
 
     def show_error(self, message: str):
-        """Display an error message on all connected monitors."""
-        self._stop_all_players()
-        video_path = self._render_error_video(message)
+        """Display an error message on all connected monitors via OSD."""
+        self._playing_monitor = None
         with self._lock:
             players = list(self._players.values())
         for player in players:
-            player.play(video_path)
+            player.show_error_text(message)
 
     def clear_error(self):
         """Remove error screens, return all monitors to blank."""
-        self._stop_all_players()
-        self._cleanup_tmp()
+        with self._lock:
+            players = list(self._players.values())
+        for player in players:
+            player.clear_error_text()
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -109,7 +98,6 @@ class DisplayManager:
 
     def shutdown(self):
         self._stop_all_players()
-        self._cleanup_tmp()
         with self._lock:
             players = list(self._players.values())
             self._players.clear()
@@ -155,64 +143,3 @@ class DisplayManager:
         for player in players:
             player.stop()
         self._playing_monitor = None
-
-    def _render_error_video(self, message: str) -> str:
-        """Render error message as a short looping video compatible with DRM output.
-
-        mpv's --vo=drm requires a proper video stream (yuv420p). PNG files are
-        not reliably supported, so we render via PIL then convert with ffmpeg.
-        """
-        img = Image.new("RGB", _ERROR_RESOLUTION, _ERROR_BG)
-        draw = ImageDraw.Draw(img)
-
-        try:
-            font = ImageFont.truetype(_FONT_PATH, _ERROR_FONT_SIZE)
-        except Exception:
-            font = ImageFont.load_default()
-
-        lines = message.split("\n")
-        line_h = _ERROR_FONT_SIZE + 12
-        total_h = len(lines) * line_h
-        y = (_ERROR_RESOLUTION[1] - total_h) // 2
-
-        for line in lines:
-            bbox = draw.textbbox((0, 0), line, font=font)
-            w = bbox[2] - bbox[0]
-            x = (_ERROR_RESOLUTION[0] - w) // 2
-            draw.text((x + 2, y + 2), line, fill=(0, 0, 0), font=font)
-            draw.text((x, y), line, fill=_ERROR_FG, font=font)
-            y += line_h
-
-        png_tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        png_tmp.close()
-        img.save(png_tmp.name)
-
-        mp4_tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-        mp4_tmp.close()
-        try:
-            subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-loop", "1", "-i", png_tmp.name,
-                    "-t", "1",
-                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-                    "-pix_fmt", "yuv420p",
-                    mp4_tmp.name,
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=30,
-            )
-        finally:
-            os.unlink(png_tmp.name)
-
-        self._tmp_files.append(mp4_tmp.name)
-        return mp4_tmp.name
-
-    def _cleanup_tmp(self):
-        for path in self._tmp_files:
-            try:
-                os.unlink(path)
-            except Exception:
-                pass
-        self._tmp_files.clear()

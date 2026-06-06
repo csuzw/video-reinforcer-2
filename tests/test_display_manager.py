@@ -141,38 +141,34 @@ class TestStop:
 # ---------------------------------------------------------------------------
 
 class TestErrorDisplay:
-    def test_show_error_plays_on_all_connected_monitors(self):
+    def test_show_error_on_all_connected_monitors(self):
         dm = _make_dm()
         p1 = _add_player(dm, 1)
         p2 = _add_player(dm, 2)
-        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
-            dm.show_error("Something went wrong")
-        p1.play.assert_called_once_with("/tmp/err.png")
-        p2.play.assert_called_once_with("/tmp/err.png")
+        dm.show_error("Something went wrong")
+        p1.show_error_text.assert_called_once_with("Something went wrong")
+        p2.show_error_text.assert_called_once_with("Something went wrong")
 
-    def test_show_error_stops_current_video_first(self):
+    def test_show_error_clears_playing_monitor(self):
         dm = _make_dm()
-        p1 = _add_player(dm, 1)
+        _add_player(dm, 1)
         dm.play(1, "/video.mp4")
-        p1.stop.reset_mock()
-        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
-            dm.show_error("Error")
-        p1.stop.assert_called_once()
+        dm.show_error("Error")
+        assert dm.playing_monitor is None
 
     def test_show_error_on_single_monitor(self):
         dm = _make_dm()
         p1 = _add_player(dm, 1)
-        with patch("src.display_manager.DisplayManager._render_error_video", return_value="/tmp/err.png"):
-            dm.show_error("Monitor 2 missing")
-        p1.play.assert_called_once()
+        dm.show_error("Monitor 2 missing")
+        p1.show_error_text.assert_called_once()
 
-    def test_clear_error_stops_all_players(self):
+    def test_clear_error_calls_clear_on_all_players(self):
         dm = _make_dm()
         p1 = _add_player(dm, 1)
         p2 = _add_player(dm, 2)
         dm.clear_error()
-        p1.stop.assert_called_once()
-        p2.stop.assert_called_once()
+        p1.clear_error_text.assert_called_once()
+        p2.clear_error_text.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
