@@ -160,6 +160,8 @@ def _load_libdrm():
     lib.drmSetMaster.argtypes = [ctypes.c_int]
     lib.drmDropMaster.restype = ctypes.c_int
     lib.drmDropMaster.argtypes = [ctypes.c_int]
+    lib.drmSetClientCap.restype = ctypes.c_int
+    lib.drmSetClientCap.argtypes = [ctypes.c_int, ctypes.c_uint64, ctypes.c_uint64]
 
     return lib
 
@@ -224,6 +226,11 @@ def create_leases(drm_card: str = _DRM_CARD) -> Tuple[int, Dict[int, int]]:
     if lib.drmSetMaster(fd) != 0:
         os.close(fd)
         raise RuntimeError(f"Cannot become DRM master on {drm_card}")
+
+    # Required to see primary and cursor planes (not just overlays)
+    _DRM_CLIENT_CAP_UNIVERSAL_PLANES = 2
+    if lib.drmSetClientCap(fd, _DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) != 0:
+        log.warning("DRM_CLIENT_CAP_UNIVERSAL_PLANES not supported — primary planes may not be found")
 
     res = lib.drmModeGetResources(fd)
     if not res:
