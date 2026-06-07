@@ -74,11 +74,16 @@ fi
 systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
 # ---- Kernel console tweaks ----
-# labwc takes exclusive DRM/KMS control; no console overlay needed.
-# Remove framebuffer console entries and DRM hacks from previous installs.
+# The kernel's own framebuffer console (vc4drmfb) grabs DRM master at boot and
+# never releases it, so labwc gets "Device or resource busy" / "Permission
+# denied" on every commit and the screen is stuck on the raw text console.
+# Redirecting fbcon to fb1 (absent on this hardware) keeps it off the real
+# DRM device, leaving master free for labwc to claim immediately.
 sed -i 's/ console=tty1//' /boot/firmware/cmdline.txt 2>/dev/null || true
-sed -i 's/ fbcon=map:1//' /boot/firmware/cmdline.txt 2>/dev/null || true
 sed -i 's/ vt.global_cursor_default=0//' /boot/firmware/cmdline.txt 2>/dev/null || true
+if ! grep -q "fbcon=map:1" /boot/firmware/cmdline.txt 2>/dev/null; then
+    sed -i 's/$/ fbcon=map:1/' /boot/firmware/cmdline.txt
+fi
 if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
     sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
 fi

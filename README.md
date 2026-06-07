@@ -277,3 +277,13 @@ journalctl -u video-reinforcer -b
 **Monitors stay blank after boot (no error message)**
 - labwc may have failed to start. Check: `systemctl status labwc`
 - If labwc crashed, check: `journalctl -u labwc -b`
+
+**Pi boots to a text console / login prompt instead of the kiosk app**
+- All services may show as "active" yet nothing is on screen — the kernel's
+  own framebuffer console (`vc4drmfb`) grabbed DRM master at boot before
+  labwc could, so labwc can't render (`journalctl -u labwc -b` shows repeated
+  `drmModeAtomicCommit: Permission denied` / `Device or resource busy`).
+- Fix: ensure `fbcon=map:1` is present in `/boot/firmware/cmdline.txt`
+  (re-running `sudo bash install/setup.sh` adds it if missing) and reboot.
+  This redirects the console away from the real framebuffer so labwc can
+  claim it immediately.
