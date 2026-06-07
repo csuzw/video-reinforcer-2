@@ -1,6 +1,9 @@
 [Unit]
 Description=labwc Wayland compositor (Video Reinforcer kiosk)
-After=local-fs.target udev.service seatd.service
+# Plymouth (boot splash) holds DRM master until it quits; starting before it
+# releases causes "Device or resource busy" and labwc never gets master.
+# This is the same ordering display managers (lightdm, gdm, etc.) use.
+After=local-fs.target udev.service seatd.service plymouth-quit.service
 Wants=udev.service seatd.service
 Conflicts=lightdm.service gdm.service gdm3.service sddm.service xdm.service lxdm.service
 

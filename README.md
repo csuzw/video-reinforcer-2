@@ -279,11 +279,18 @@ journalctl -u video-reinforcer -b
 - If labwc crashed, check: `journalctl -u labwc -b`
 
 **Pi boots to a text console / login prompt instead of the kiosk app**
-- All services may show as "active" yet nothing is on screen — the kernel's
-  own framebuffer console (`vc4drmfb`) grabbed DRM master at boot before
-  labwc could, so labwc can't render (`journalctl -u labwc -b` shows repeated
-  `drmModeAtomicCommit: Permission denied` / `Device or resource busy`).
-- Fix: ensure `fbcon=map:1` is present in `/boot/firmware/cmdline.txt`
-  (re-running `sudo bash install/setup.sh` adds it if missing) and reboot.
-  This redirects the console away from the real framebuffer so labwc can
-  claim it immediately.
+- All services may show as "active" yet nothing is on screen — something else
+  held DRM master when labwc started, so it can never render
+  (`journalctl -u labwc -b` shows repeated `drmModeAtomicCommit: Permission
+  denied` and `journalctl -u seatd -b` shows `Could not make device fd drm
+  master: Device or resource busy`). The screen then just shows the kernel's
+  raw console (with the autologin root shell on top).
+- Two known causes, both fixed by the current `setup.sh`/`labwc.service`:
+  - The kernel's own framebuffer console (`vc4drmfb`) binding to the real
+    display — fixed by `fbcon=map:1` in `/boot/firmware/cmdline.txt`
+    (redirects it to a non-existent `fb1`, so it never claims the real device).
+  - Plymouth (boot splash) still holding master when labwc starts — fixed by
+    `labwc.service` ordering itself `After=plymouth-quit.service`, the same
+    dependency display managers like lightdm use.
+- If you hit this after manually editing service files, re-run
+  `sudo bash install/setup.sh` to reinstall them and reboot.
