@@ -294,3 +294,14 @@ journalctl -u video-reinforcer -b
     dependency display managers like lightdm use.
 - If you hit this after manually editing service files, re-run
   `sudo bash install/setup.sh` to reinstall them and reboot.
+
+**Quitting the app shows a black screen instead of the desktop**
+- This is the same DRM master race as above, just on the way out: the desktop
+  display manager (e.g. `lightdm`) started before `labwc` had fully released
+  DRM master, so neither could render anything.
+- Fixed by adding `Before=` alongside `Conflicts=` in `labwc.service` for each
+  display manager — this guarantees labwc's shutdown is ordered ahead of the
+  display manager's startup (per `systemd.unit(5)`, `Conflicts=` alone does
+  not imply ordering).
+- If you hit this after manually editing `labwc.service`, re-run
+  `sudo bash install/setup.sh` to reinstall it and reboot.

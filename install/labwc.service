@@ -5,7 +5,12 @@ Description=labwc Wayland compositor (Video Reinforcer kiosk)
 # This is the same ordering display managers (lightdm, gdm, etc.) use.
 After=local-fs.target udev.service seatd.service plymouth-quit.service
 Wants=udev.service seatd.service
+# Conflicts= alone does not order the handoff — without Before=, systemd may
+# start the display manager while labwc is still releasing DRM master,
+# producing a black screen instead of the restored desktop on quit. Before=
+# guarantees labwc's shutdown is ordered ahead of the display manager's startup.
 Conflicts=lightdm.service gdm.service gdm3.service sddm.service xdm.service lxdm.service
+Before=lightdm.service gdm.service gdm3.service sddm.service xdm.service lxdm.service
 
 [Service]
 Type=simple

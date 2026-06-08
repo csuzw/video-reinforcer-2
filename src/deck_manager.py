@@ -52,9 +52,11 @@ class DeckManager:
             if not self._deck or key >= self._key_count:
                 return
             try:
+                fmt = self._deck.key_image_format()
+                size = (fmt["size"][0], fmt["size"][1])
                 native = PILHelper.to_native_format(
                     self._deck,
-                    image.convert("RGB").resize(self.key_image_size(), Image.LANCZOS),
+                    image.convert("RGB").resize(size, Image.LANCZOS),
                 )
                 self._deck.set_key_image(key, native)
             except Exception as e:
