@@ -213,8 +213,12 @@ If a quit button is configured in `config.json`, pressing it stops the app clean
 ```bash
 ssh <username>@<pi-hostname>
 
-# Stop the app — desktop restarts automatically
+# Stop the app (labwc keeps the screen — it does NOT return to the desktop;
+# see note below for why this is a separate, deliberate step)
 sudo systemctl stop video-reinforcer
+
+# Get the desktop back, if you need it (DM name saved by setup.sh)
+sudo systemctl start "$(cat /opt/video-reinforcer/display-manager)"
 
 # Prevent it from starting on next boot
 sudo systemctl disable video-reinforcer
@@ -222,6 +226,16 @@ sudo systemctl disable video-reinforcer
 # Re-enable and start it again
 sudo systemctl enable video-reinforcer && sudo systemctl start video-reinforcer
 ```
+
+> **Why the display-manager handoff isn't automatic on `systemctl stop`:** it
+> only happens from the in-app quit button/key (`App._quit`/
+> `_restore_display_manager`, ordered safely against `labwc.service` via
+> `Before=` — see `labwc.service`). An `ExecStopPost` hook that did this
+> automatically would also fire on `systemctl restart` (used when deploying
+> updates) and on `Restart=on-failure` crash recovery, racing the new instance
+> for DRM master and potentially leaving the kiosk stuck on the desktop
+> instead of auto-recovering — exactly what this app must never do. If you
+> need the desktop after an SSH stop, start it explicitly as shown above.
 
 ### Useful commands
 

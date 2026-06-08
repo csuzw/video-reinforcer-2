@@ -12,7 +12,10 @@ Environment=WAYLAND_DISPLAY=wayland-0
 # Wait for labwc's Wayland socket before starting the app
 ExecStartPre=/bin/bash -c 'until [ -S /run/labwc/wayland-0 ]; do sleep 0.2; done'
 ExecStart=/opt/video-reinforcer/venv/bin/python3 -m src.main
-ExecStopPost=/bin/bash -c 'DM=$(cat /opt/video-reinforcer/display-manager 2>/dev/null); [ -n "$DM" ] && systemctl start "$DM" || true'
+# Deliberately no ExecStopPost display-manager handoff here: it would fire on
+# every stop — including `systemctl restart` and Restart=on-failure crash
+# recovery — and race the new instance for DRM master (see App._quit /
+# _restore_display_manager, which is the only place this should happen).
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=30
