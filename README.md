@@ -165,6 +165,16 @@ The setup script:
 - Disables any running desktop display manager (saves its name so it can be restored when the app exits)
 - Installs and enables three systemd services: `seatd`, `labwc`, and `video-reinforcer`
 
+> **SSH is recommended, but running it from a terminal on the Pi's own desktop
+> also works.** Setup shuts the desktop down part-way through, which would
+> normally kill the terminal and the script with it. When `setup.sh` detects
+> it was started from a desktop session it re-launches itself in the
+> background (as the `video-reinforcer-setup` systemd unit) and shows its
+> progress until the desktop closes. The terminal window disappearing is
+> expected. When setup finishes the screen switches to the app. If it fails,
+> the error is shown on the text console and the full log is saved to
+> `/var/log/video-reinforcer-setup.log`.
+
 ### 3. Insert the USB stick and reboot
 
 ```bash
@@ -292,7 +302,25 @@ journalctl -u video-reinforcer -b
 - labwc may have failed to start. Check: `systemctl status labwc`
 - If labwc crashed, check: `journalctl -u labwc -b`
 
+**Setup went to a black screen with a flashing cursor, and after reboot there's a `<hostname> login:` prompt**
+- Setup was interrupted before it finished. The most common cause was running
+  an older `setup.sh` from a terminal window on the Pi's desktop: when setup
+  stopped the desktop, the terminal and the script were killed with it. The
+  current `setup.sh` protects against this (see Installation step 2).
+- The login is the **username and password you set in Raspberry Pi Imager**
+  when flashing the SD card (not `root`, and there is no `pi`/`raspberry`
+  default any more).
+- After logging in, finish the install by re-running it (it's safe to re-run):
+  ```bash
+  cd video-reinforcer-2
+  git pull
+  sudo bash install/setup.sh
+  ```
+- If setup fails again, the error is on screen and in
+  `/var/log/video-reinforcer-setup.log` (when it was run from the desktop).
+
 **Pi boots to a text console / login prompt instead of the kiosk app**
+(with an auto-logged-in root shell rather than a login prompt)
 - All services may show as "active" yet nothing is on screen — something else
   held DRM master when labwc started, so it can never render
   (`journalctl -u labwc -b` shows repeated `drmModeAtomicCommit: Permission
