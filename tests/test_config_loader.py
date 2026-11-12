@@ -207,6 +207,21 @@ class TestRequiresDeck:
         config = _parse({"buttons": {"0": {"video": "v.mp4", "key": "1"}}})
         assert config.requires_deck() is False
 
+    def test_deck_only_actions_lists_buttons_and_quit(self):
+        config = _parse({
+            "quit": {"stream_deck_button": 5},
+            "buttons": {
+                "3": {"video": "v3.mp4"},
+                "0": {"video": "v0.mp4", "key": "1"},
+                "1": {"video": "v1.mp4"},
+            },
+        })
+        assert config.deck_only_actions() == ["button 1", "button 3", "quit"]
+
+    def test_deck_only_actions_empty_when_all_have_keys(self):
+        config = _parse({"buttons": {"0": {"video": "v.mp4", "key": "1"}}})
+        assert config.deck_only_actions() == []
+
 
 # ---------------------------------------------------------------------------
 # Path helpers on ButtonConfig

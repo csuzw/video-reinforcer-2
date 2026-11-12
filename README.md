@@ -92,7 +92,7 @@ The app looks for `config.json` at the root of the USB stick. Videos and button 
 
 ### `buttons`
 
-Each entry maps a Stream Deck key index to a video. Key `"0"` is the top-left button on the Stream Deck.
+Each entry maps a Stream Deck key index to a video. Key `"0"` is the top-left button on the Stream Deck, counting left to right, then top to bottom (on a 5×3 Classic, `"3"` is the fourth key on the top row). Every button is always on the Stream Deck — the optional `key` field adds a keyboard shortcut for it as well.
 
 | Field | Required | Description |
 |---|---|---|
@@ -117,6 +117,15 @@ Stops the app cleanly and returns to the desktop. The service does not restart u
 | `button.*` | No | Appearance of the quit key on the Stream Deck (same fields as above) |
 
 Either or both of `stream_deck_button` and `key` can be specified. If `quit` is omitted entirely, there is no quit button — use SSH instead.
+
+### Using a keyboard only (no Stream Deck)
+
+The app only needs a Stream Deck if some action can't be triggered from the keyboard. To run with a keyboard alone:
+
+- **every** entry in `buttons` must have a `key`, and
+- if `quit` has a `stream_deck_button`, it must also have a `key`.
+
+If any button (or quit) has no `key` and no Stream Deck is connected, the monitors show *"Stream Deck not connected"* along with the actions that have no keyboard key. Add a `key` to each listed action, or remove it, then re-insert the USB stick.
 
 ### Keyboard key names
 
@@ -264,7 +273,7 @@ Every error state is shown on screen in plain English. The app recovers automati
 | Button pressed for disconnected monitor | 4-second error, then clears | Check cables or fix `config.json` |
 | Video file missing or unplayable | 4-second error, then clears | Check files on USB stick |
 | Monitor unplugged while running | Error on remaining monitors | Reconnect monitor |
-| Stream Deck unplugged | Error on all monitors | Reconnect — buttons relight automatically |
+| Stream Deck not connected (and some button or quit has no keyboard `key`) | Error on all monitors listing the actions with no keyboard key | Connect the Stream Deck — buttons relight automatically — or add a `key` to each listed action in `config.json` |
 
 ---
 

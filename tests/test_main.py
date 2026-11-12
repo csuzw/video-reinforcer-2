@@ -231,6 +231,9 @@ class TestDeckEvents:
         app._on_deck_disconnected()
 
         app._display.show_error.assert_called()
+        message = app._display.show_error.call_args[0][0]
+        assert "button 1" in message
+        assert "button 0" not in message
 
     def test_deck_disconnect_no_error_when_deck_not_required(self, app):
         """No error when every button and quit also has a keyboard key."""

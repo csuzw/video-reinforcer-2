@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 USB_MOUNT = "/mnt/vr-usb"
 CONFIG_FILE = "config.json"
@@ -53,14 +53,16 @@ class AppConfig:
         """Map normalized key name → button index for quick lookup."""
         return {btn.key: idx for idx, btn in self.buttons.items() if btn.key}
 
+    def deck_only_actions(self) -> List[str]:
+        """Human-readable names of actions that have no keyboard key (Stream Deck only)."""
+        actions = [f"button {idx}" for idx, btn in sorted(self.buttons.items()) if btn.key is None]
+        if self.quit and self.quit.stream_deck_button is not None and self.quit.key is None:
+            actions.append("quit")
+        return actions
+
     def requires_deck(self) -> bool:
         """True if any action can only be triggered via Stream Deck (no keyboard key)."""
-        for btn in self.buttons.values():
-            if btn.key is None:
-                return True
-        if self.quit and self.quit.stream_deck_button is not None and self.quit.key is None:
-            return True
-        return False
+        return bool(self.deck_only_actions())
 
 
 def load_config() -> AppConfig:

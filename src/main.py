@@ -23,10 +23,17 @@ _MSG_NO_USB = (
     "Please insert the USB stick\n"
     "with videos and config.json."
 )
-_MSG_NO_DECK = (
-    "Stream Deck disconnected.\n"
-    "Please reconnect it."
-)
+
+
+def _no_deck_message(config: AppConfig) -> str:
+    """Explain why a Stream Deck is needed and how to avoid needing one."""
+    actions = ", ".join(config.deck_only_actions())
+    return (
+        "Stream Deck not connected.\n\n"
+        f"No keyboard key set for: {actions}\n\n"
+        "Connect a Stream Deck, or add a \"key\"\n"
+        "for these in config.json."
+    )
 
 
 class App:
@@ -120,7 +127,7 @@ class App:
         self._deck_connected = False
         if self._usb_ok and self._playing_button is None:
             if self._config and self._config.requires_deck():
-                self._display.show_error(_MSG_NO_DECK)
+                self._display.show_error(_no_deck_message(self._config))
 
     # ------------------------------------------------------------------
     # Player errors (monitor unplugged, video unplayable)
@@ -188,7 +195,7 @@ class App:
         if not self._usb_ok:
             self._display.show_error(_MSG_NO_USB)
         elif not self._deck_connected and self._config and self._config.requires_deck():
-            self._display.show_error(_MSG_NO_DECK)
+            self._display.show_error(_no_deck_message(self._config))
         else:
             self._display.clear_error()
 
