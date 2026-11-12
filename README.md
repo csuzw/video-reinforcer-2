@@ -22,7 +22,7 @@ The app itself has no OS-specific code. The Pi 5 requirement comes from the hard
 
 1. The Pi boots directly into the app — no login prompt.
 2. The app reads `config.json` from a USB stick to determine which buttons play which videos on which monitor.
-3. Press a Stream Deck button (or keyboard key) → video starts looping on the assigned monitor.
+3. Press a Stream Deck button (or keyboard key) → video starts looping on the assigned monitor, and that key gets a red border on the Stream Deck (the colour is configurable).
 4. Press the same button again → video stops, monitor goes blank.
 5. Press a different button → current video stops, new video starts on its assigned monitor.
 6. Remove the USB stick → both monitors show an error message, all buttons go dark.
@@ -56,6 +56,7 @@ The app looks for `config.json` at the root of the USB stick. Videos and button 
 
 ```json
 {
+  "playing_border_color": "#FF0000",
   "quit": {
     "stream_deck_button": 5,
     "key": "F12",
@@ -89,6 +90,10 @@ The app looks for `config.json` at the root of the USB stick. Videos and button 
   }
 }
 ```
+
+### `playing_border_color` (optional)
+
+While a video is playing, its key on the Stream Deck shows a thick coloured border. The border moves when you switch videos and disappears when the video stops, including when an error ends playback. This sets the border colour as a hex value, e.g. `"#00FF00"` for green. Default: `"#FF0000"` (red). An invalid value shows a configuration error on screen.
 
 ### `buttons`
 

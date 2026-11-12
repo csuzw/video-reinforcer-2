@@ -88,6 +88,29 @@ class TestRenderImageButton:
         assert r == 0
 
 
+class TestBorder:
+    def test_border_drawn_at_edge(self):
+        img = render_button((72, 72), style_type="color", color="#0000FF", border_color="#FF0000")
+        assert img.getpixel((0, 0)) == (255, 0, 0)
+        assert img.getpixel((71, 36)) == (255, 0, 0)
+        assert img.getpixel((36, 36)) == (0, 0, 255)  # centre untouched
+
+    def test_custom_border_color(self):
+        img = render_button((72, 72), style_type="color", color="#000000", border_color="#00FF00")
+        assert img.getpixel((2, 2)) == (0, 255, 0)
+
+    def test_no_border_by_default(self):
+        img = render_button((72, 72), style_type="color", color="#0000FF")
+        assert img.getpixel((0, 0)) == (0, 0, 255)
+
+    def test_border_on_image_button(self, tmp_path):
+        path = str(tmp_path / "btn.png")
+        Image.new("RGB", (100, 100), (0, 0, 255)).save(path)
+        img = render_button((72, 72), style_type="image", image_path=path, border_color="#FF0000")
+        assert img.getpixel((0, 0)) == (255, 0, 0)
+        assert img.getpixel((36, 36)) == (0, 0, 255)
+
+
 class TestLabel:
     def test_label_adds_non_background_pixels_at_bottom(self):
         # Black background so label pixels stand out

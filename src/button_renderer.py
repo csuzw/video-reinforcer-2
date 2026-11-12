@@ -16,7 +16,9 @@ def render_button(
     color: Optional[str] = None,
     image_path: Optional[str] = None,
     label: Optional[str] = None,
+    border_color: Optional[str] = None,
 ) -> Image.Image:
+    """Render a key image. border_color draws a thick frame (used for the playing key)."""
     if style_type == "image" and image_path and os.path.exists(image_path):
         try:
             img = Image.open(image_path).convert("RGB").resize(size, Image.LANCZOS)
@@ -28,6 +30,9 @@ def render_button(
     if label:
         _draw_label(img, label)
 
+    if border_color:
+        _draw_border(img, border_color)
+
     return img
 
 
@@ -35,13 +40,26 @@ def render_blank(size: Tuple[int, int]) -> Image.Image:
     return Image.new("RGB", size, (0, 0, 0))
 
 
-def _solid(size: Tuple[int, int], hex_color: Optional[str]) -> Image.Image:
+def _parse_hex(hex_color: Optional[str], default: Tuple[int, int, int]) -> Tuple[int, int, int]:
     try:
-        h = (hex_color or "#222222").lstrip("#")
-        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        h = hex_color.lstrip("#")
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     except Exception:
-        r, g, b = 34, 34, 34
-    return Image.new("RGB", size, (r, g, b))
+        return default
+
+
+def _solid(size: Tuple[int, int], hex_color: Optional[str]) -> Image.Image:
+    return Image.new("RGB", size, _parse_hex(hex_color, (34, 34, 34)))
+
+
+def _draw_border(img: Image.Image, hex_color: str):
+    width = max(4, min(img.size) // 10)  # ~7px on a 72px key, ~9px on XL
+    draw = ImageDraw.Draw(img)
+    draw.rectangle(
+        [0, 0, img.width - 1, img.height - 1],
+        outline=_parse_hex(hex_color, (255, 0, 0)),
+        width=width,
+    )
 
 
 def _draw_label(img: Image.Image, text: str):

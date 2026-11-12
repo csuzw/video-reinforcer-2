@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -44,10 +45,15 @@ class QuitConfig:
     ))
 
 
+DEFAULT_PLAYING_BORDER_COLOR = "#FF0000"
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
 @dataclass
 class AppConfig:
     buttons: Dict[int, ButtonConfig]
     quit: Optional[QuitConfig] = None
+    playing_border_color: str = DEFAULT_PLAYING_BORDER_COLOR
 
     def key_map(self) -> Dict[str, int]:
         """Map normalized key name → button index for quick lookup."""
@@ -121,7 +127,14 @@ def _parse(data: dict) -> AppConfig:
         raise ConfigError("config.json defines no buttons")
 
     quit_cfg = _parse_quit(data.get("quit"))
-    return AppConfig(buttons=buttons, quit=quit_cfg)
+
+    border = data.get("playing_border_color", DEFAULT_PLAYING_BORDER_COLOR)
+    if not isinstance(border, str) or not _HEX_COLOR_RE.match(border):
+        raise ConfigError(
+            f"playing_border_color must be a hex colour like \"#FF0000\", got {border!r}"
+        )
+
+    return AppConfig(buttons=buttons, quit=quit_cfg, playing_border_color=border)
 
 
 def _parse_quit(data: Optional[dict]) -> Optional[QuitConfig]:

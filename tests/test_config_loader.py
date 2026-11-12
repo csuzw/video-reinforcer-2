@@ -164,6 +164,31 @@ class TestQuitConfig:
 
 
 # ---------------------------------------------------------------------------
+# playing_border_color
+# ---------------------------------------------------------------------------
+
+class TestPlayingBorderColor:
+    def test_defaults_to_red(self):
+        config = _parse({"buttons": {"0": {"video": "v.mp4"}}})
+        assert config.playing_border_color == "#FF0000"
+
+    def test_custom_color(self):
+        config = _parse({
+            "playing_border_color": "#00ff00",
+            "buttons": {"0": {"video": "v.mp4"}},
+        })
+        assert config.playing_border_color == "#00ff00"
+
+    @pytest.mark.parametrize("bad", ["red", "#FFF", "00FF00", 123, None])
+    def test_invalid_color_rejected(self, bad):
+        with pytest.raises(ConfigError, match="playing_border_color"):
+            _parse({
+                "playing_border_color": bad,
+                "buttons": {"0": {"video": "v.mp4"}},
+            })
+
+
+# ---------------------------------------------------------------------------
 # requires_deck()
 # ---------------------------------------------------------------------------
 

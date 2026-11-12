@@ -134,7 +134,7 @@ class App:
     # ------------------------------------------------------------------
 
     def _on_player_error(self, monitor: int, message: str):
-        self._playing_button = None
+        self._set_playing(None)
         self._cancel_transient_error()
         self._display.show_error(message)
 
@@ -169,7 +169,7 @@ class App:
         if self._playing_button == key:
             self._cancel_transient_error()
             self._display.stop()
-            self._playing_button = None
+            self._set_playing(None)
             log.info("Button %d: stopped", key)
             self._refresh_display()
         else:
@@ -183,8 +183,21 @@ class App:
                 )
                 return
             self._cancel_transient_error()
-            self._playing_button = key
+            # Video is already starting — redraw keys afterwards so the
+            # border never delays playback.
+            self._set_playing(key)
             log.info("Button %d: playing %s on monitor %d", key, video_path, btn.monitor)
+
+    def _set_playing(self, key: Optional[int]):
+        """Update the playing button and move the Stream Deck border to match."""
+        old = self._playing_button
+        self._playing_button = key
+        if old == key:
+            return
+        size = self._deck.key_image_size()
+        for idx in (old, key):
+            if idx is not None:
+                self._draw_button_key(idx, size)
 
     # ------------------------------------------------------------------
     # Display state
@@ -205,7 +218,7 @@ class App:
 
     def _show_transient_error(self, message: str):
         self._cancel_transient_error()
-        self._playing_button = None
+        self._set_playing(None)
         self._display.show_error(message)
         self._transient_timer = threading.Timer(
             _TRANSIENT_ERROR_DURATION, self._clear_transient_error
@@ -234,15 +247,8 @@ class App:
         size = self._deck.key_image_size()
         self._deck.clear_all_keys()
 
-        for idx, btn in self._config.buttons.items():
-            img = render_button(
-                size=size,
-                style_type=btn.style.type,
-                color=btn.style.color,
-                image_path=btn.image_path(),
-                label=btn.style.label,
-            )
-            self._deck.set_key_image(idx, img)
+        for idx in self._config.buttons:
+            self._draw_button_key(idx, size)
 
         quit_cfg = self._config.quit
         if quit_cfg and quit_cfg.stream_deck_button is not None:
@@ -254,6 +260,23 @@ class App:
                 label=quit_cfg.style.label,
             )
             self._deck.set_key_image(quit_cfg.stream_deck_button, img)
+
+    def _draw_button_key(self, idx: int, size):
+        """Draw one video button's key, with a border if it is the one playing."""
+        if not self._config:
+            return
+        btn = self._config.buttons.get(idx)
+        if btn is None:
+            return
+        img = render_button(
+            size=size,
+            style_type=btn.style.type,
+            color=btn.style.color,
+            image_path=btn.image_path(),
+            label=btn.style.label,
+            border_color=self._config.playing_border_color if idx == self._playing_button else None,
+        )
+        self._deck.set_key_image(idx, img)
 
     # ------------------------------------------------------------------
     # Quit

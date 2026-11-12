@@ -183,6 +183,72 @@ class TestButtonPress:
 
 
 # ---------------------------------------------------------------------------
+# Playing-key border on the Stream Deck
+# ---------------------------------------------------------------------------
+
+class TestPlayingBorder:
+    def _load_config(self, app, config=_TWO_BUTTON_CONFIG):
+        with patch("src.main.load_config", return_value=_parse(config)):
+            app._on_usb_mounted()
+
+    def test_play_draws_border_on_playing_key(self, app):
+        self._load_config(app)
+        with patch("src.main.render_button") as render, \
+             patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+        assert render.call_count == 1
+        assert render.call_args.kwargs["border_color"] == "#FF0000"
+        assert app._deck.set_key_image.call_args[0][0] == 0
+
+    def test_stop_removes_border(self, app):
+        self._load_config(app)
+        with patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+            with patch("src.main.render_button") as render:
+                app._on_button_press(0)
+        assert render.call_args.kwargs["border_color"] is None
+
+    def test_switching_moves_border(self, app):
+        self._load_config(app)
+        with patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+            app._deck.set_key_image.reset_mock()
+            with patch("src.main.render_button") as render:
+                render.side_effect = lambda **kw: kw.get("border_color")
+                app._on_button_press(1)
+        drawn = {c[0][0]: c[0][1] for c in app._deck.set_key_image.call_args_list}
+        assert drawn == {0: None, 1: "#FF0000"}
+
+    def test_player_error_removes_border(self, app):
+        self._load_config(app)
+        with patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+        with patch("src.main.render_button") as render:
+            app._on_player_error(1, "Monitor 1 disconnected")
+        assert render.call_args.kwargs["border_color"] is None
+
+    def test_custom_border_color_used(self, app):
+        config = dict(_TWO_BUTTON_CONFIG, playing_border_color="#00FF00")
+        self._load_config(app, config)
+        with patch("src.main.render_button") as render, \
+             patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+        assert render.call_args.kwargs["border_color"] == "#00FF00"
+
+    def test_deck_reconnect_keeps_border_on_playing_key(self, app):
+        self._load_config(app)
+        with patch("src.main.os.path.exists", return_value=True):
+            app._on_button_press(0)
+        with patch("src.main.render_button") as render:
+            render.side_effect = lambda **kw: kw.get("border_color")
+            app._deck.set_key_image.reset_mock()
+            app._on_deck_connected()
+        drawn = {c[0][0]: c[0][1] for c in app._deck.set_key_image.call_args_list}
+        assert drawn[0] == "#FF0000"
+        assert drawn[1] is None
+
+
+# ---------------------------------------------------------------------------
 # Keyboard input
 # ---------------------------------------------------------------------------
 
