@@ -1,0 +1,34 @@
+#!/bin/bash
+# Join this device to Tailscale with the auth key from the boot partition.
+#
+# Put the key in a file called tailscale-authkey (or tailscale-authkey.txt,
+# as Windows Notepad saves it) on the SD card's bootfs drive. On success the
+# file is deleted so the key doesn't sit on the card. On failure (e.g. no
+# network yet) it is kept and tried again on the next boot.
+set -u
+
+KEYFILE=""
+for f in /boot/firmware/tailscale-authkey /boot/firmware/tailscale-authkey.txt; do
+    if [ -f "$f" ]; then KEYFILE="$f"; break; fi
+done
+[ -n "$KEYFILE" ] || exit 0
+
+# Keep only characters that can appear in a key: drops whitespace, CRLF and
+# any UTF-8 BOM that Notepad adds.
+KEY="$(LC_ALL=C tr -cd 'A-Za-z0-9_-' < "$KEYFILE")"
+if [ -z "$KEY" ]; then
+    echo "vr-tailscale-up: $KEYFILE is empty" >&2
+    exit 1
+fi
+
+for attempt in $(seq 1 20); do
+    if tailscale up --auth-key="$KEY" --ssh --hostname="$(hostname)" --timeout=30s; then
+        echo "vr-tailscale-up: joined Tailscale as $(hostname)"
+        shred -u "$KEYFILE" 2>/dev/null || rm -f "$KEYFILE"
+        exit 0
+    fi
+    echo "vr-tailscale-up: attempt $attempt failed, retrying" >&2
+    sleep 15
+done
+echo "vr-tailscale-up: could not join Tailscale; will retry next boot" >&2
+exit 1

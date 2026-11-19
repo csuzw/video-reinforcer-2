@@ -1,0 +1,24 @@
+#!/bin/bash
+# Update Video Reinforcer from GitHub and reinstall it.
+#   sudo vr-update            # latest master
+#   sudo vr-update my-branch  # a specific branch (e.g. to test a fix)
+# Local changes in the source folder are discarded.
+set -euo pipefail
+
+SRC="$(cat /opt/video-reinforcer/source-dir)"
+BRANCH="${1:-master}"
+
+# Run git as the folder's owner, so a clone in someone's home directory
+# doesn't end up with root-owned files that break their own `git pull`.
+OWNER="$(stat -c %U "$SRC")"
+if [ "$OWNER" = "$(id -un)" ]; then
+    GIT=(git -C "$SRC")
+else
+    GIT=(sudo -u "$OWNER" git -C "$SRC")
+fi
+
+echo "Updating $SRC to origin/$BRANCH"
+"${GIT[@]}" fetch origin "$BRANCH"
+"${GIT[@]}" checkout -q -B "$BRANCH" FETCH_HEAD
+"${GIT[@]}" log --oneline -1
+exec bash "$SRC/install/setup.sh"

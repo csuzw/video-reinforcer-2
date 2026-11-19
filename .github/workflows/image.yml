@@ -1,0 +1,58 @@
+name: Build SD card image
+
+# Builds the Raspberry Pi 4/5 image with pi-gen (see image/README.md).
+#  - Any branch push that changes the image definition or the install
+#    scripts: image uploaded as a workflow artifact (kept 14 days).
+#  - Tag push (v*): image also attached to a GitHub release.
+#  - Manual: "Run workflow" on the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'image/**'
+      - 'install/**'
+      - '.github/workflows/image.yml'
+
+permissions:
+  contents: write  # only used to create releases on tags
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Native arm64: no QEMU emulation, so the build is several times faster.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: version string + vr-update on device
+
+      - name: Build image
+        run: bash image/build.sh
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-reinforcer-image-${{ github.sha }}
+          path: image/deploy/*.img.xz
+          compression-level: 0  # already xz-compressed
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.sha }}
+          path: image/work/pi-gen/deploy/*.log
+          if-no-files-found: ignore
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" image/deploy/*.img.xz --generate-notes

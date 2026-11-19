@@ -1,12 +1,17 @@
 #!/bin/bash
 # Video Reinforcer — setup script (Raspberry Pi 4 / 5, or any Debian-based Linux)
 # Run as root: sudo bash setup.sh
+#
+# Also used to build the SD card image (image/), where it runs inside a chroot
+# with VR_IMAGE_BUILD=1: nothing is started or restarted, only installed and
+# enabled, because there is no running system to act on.
 set -e
 
 APP_DIR="/opt/video-reinforcer"
 MOUNT_POINT="/mnt/vr-usb"
 SERVICE="video-reinforcer"
 BOOT_DIR="/boot/firmware"   # Raspberry Pi boot partition (FAT, editable from any PC)
+IMAGE_BUILD="${VR_IMAGE_BUILD:-0}"
 
 echo "=== Video Reinforcer Setup ==="
 
@@ -21,6 +26,7 @@ apt-get install -y \
     python3-venv \
     python3-dev \
     gcc \
+    git \
     libhidapi-libusb0 \
     libudev-dev \
     fonts-dejavu-core
@@ -32,8 +38,10 @@ mkdir -p "$MOUNT_POINT"
 cat > /etc/udev/rules.d/50-streamdeck.rules << 'EOF'
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", GROUP="plugdev", TAG+="uaccess"
 EOF
-udevadm control --reload-rules
-udevadm trigger
+if [ "$IMAGE_BUILD" != "1" ]; then
+    udevadm control --reload-rules
+    udevadm trigger
+fi
 
 # ---- Deploy application ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,6 +51,11 @@ mkdir -p "$APP_DIR"
 rm -rf "$APP_DIR/src"
 cp -r "$APP_SRC/src" "$APP_DIR/"
 cp "$APP_SRC/requirements.txt" "$APP_DIR/"
+
+# ---- Updater: `sudo vr-update [branch]` pulls from GitHub and re-runs this script ----
+echo "$APP_SRC" > "$APP_DIR/source-dir"
+install -m 755 "$SCRIPT_DIR/vr-update" /usr/local/sbin/vr-update
+sed -i 's/\r$//' /usr/local/sbin/vr-update  # tolerate a Windows checkout
 
 # ---- Python dependencies ----
 python3 -m venv "$APP_DIR/venv"
@@ -76,7 +89,11 @@ else
     rm -f "$APP_DIR/display-manager"
     echo "No display manager detected (terminal-only setup)"
 fi
-systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
+if [ "$IMAGE_BUILD" = "1" ]; then
+    systemctl disable lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
+else
+    systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
+fi
 
 # ---- Kernel console tweaks (Raspberry Pi only) ----
 # The kernel's own framebuffer console (vc4drmfb) grabs DRM master at boot and
@@ -119,14 +136,16 @@ chmod 755 "$APP_DIR/labwc-start.sh"
 # ---- Install and enable systemd services ----
 cp "$SCRIPT_DIR/labwc.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/video-reinforcer.service" /etc/systemd/system/
-systemctl daemon-reload
+[ "$IMAGE_BUILD" = "1" ] || systemctl daemon-reload
 systemctl enable seatd
 systemctl enable labwc
 systemctl enable "$SERVICE"
-# Start in dependency order; labwc waits for seatd, app waits for labwc
-systemctl restart seatd
-systemctl restart labwc
-systemctl restart "$SERVICE"
+if [ "$IMAGE_BUILD" != "1" ]; then
+    # Start in dependency order; labwc waits for seatd, app waits for labwc
+    systemctl restart seatd
+    systemctl restart labwc
+    systemctl restart "$SERVICE"
+fi
 
 echo ""
 echo "=== Setup complete ==="

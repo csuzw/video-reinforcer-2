@@ -1,0 +1,25 @@
+# pi-gen settings for the Video Reinforcer image. Sourced by build-docker.sh.
+# FIRST_USER_PASS is appended (random) by image/build.sh.
+IMG_NAME="video-reinforcer"
+PI_GEN_RELEASE="Video Reinforcer"
+STAGE_LIST="stage0 stage1 stage2 stage-vr"
+DEPLOY_COMPRESSION="xz"
+COMPRESSION_LEVEL=6
+
+TARGET_HOSTNAME="video-reinforcer"
+FIRST_USER_NAME="vr"
+DISABLE_FIRST_BOOT_USER_RENAME=1
+
+# No password SSH. Remote access is Tailscale SSH, or SSH keys added with
+# Raspberry Pi Imager's settings.
+ENABLE_SSH=0
+
+LOCALE_DEFAULT="en_GB.UTF-8"
+KEYBOARD_KEYMAP="gb"
+KEYBOARD_LAYOUT="English (UK)"
+TIMEZONE_DEFAULT="Europe/London"
+WPA_COUNTRY="GB"
+
+# Keep cloud-init so Raspberry Pi Imager's settings (hostname, Wi-Fi, SSH
+# keys) are applied on first boot.
+ENABLE_CLOUD_INIT=1

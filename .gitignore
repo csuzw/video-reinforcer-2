@@ -7,3 +7,7 @@ dist/
 build/
 .DS_Store
 .claude/*.lock
+
+# SD card image build output
+image/work/
+image/deploy/

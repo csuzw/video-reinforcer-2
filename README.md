@@ -178,7 +178,14 @@ Output names are the DRM connector names, listed by `ls /sys/class/drm/` (e.g. `
 
 ## Installation
 
-### 1. Install a 64-bit Linux OS
+There are two ways to install:
+
+- **Option A: ready-made SD card image (recommended for Raspberry Pi).** Flash it with Raspberry Pi Imager and it boots straight into the app, with Tailscale for remote support. No setup script, no SSH. See **[image/README.md](image/README.md)**.
+- **Option B: install onto an existing OS** with the setup script, below. Use this for development, or on hardware other than a Pi.
+
+### Option B: setup script
+
+#### 1. Install a 64-bit Linux OS
 
 The easiest option is [Raspberry Pi OS](https://www.raspberrypi.com/software/) (Lite or Desktop, 64-bit), flashed with Raspberry Pi Imager. When prompted:
 
@@ -187,7 +194,7 @@ The easiest option is [Raspberry Pi OS](https://www.raspberrypi.com/software/) (
 
 Any other 64-bit Linux distribution works provided `labwc`, `seatd`, `mpv`, `ffmpeg`, `python3`, and `libhidapi` are available.
 
-### 2. Clone and run setup
+#### 2. Clone and run setup
 
 SSH into the Pi, then:
 
@@ -203,8 +210,9 @@ The setup script:
 - Generates a blank video used as the OSD background
 - Disables any running desktop display manager (saves its name so it can be restored when the app exits)
 - Installs and enables three systemd services: `seatd`, `labwc`, and `video-reinforcer`
+- Installs the `vr-update` command and an example hardware settings file (`video-reinforcer.conf` on the boot partition)
 
-### 3. Insert the USB stick and reboot
+#### 3. Insert the USB stick and reboot
 
 ```bash
 sudo reboot
@@ -217,10 +225,11 @@ The Pi boots directly into the app. Insert your configured USB stick and the but
 ## Updating the app
 
 ```bash
-cd video-reinforcer-2
-git pull
-sudo bash install/setup.sh
+sudo vr-update              # latest master
+sudo vr-update some-branch  # or a specific branch
 ```
+
+`vr-update` (installed by setup) pulls the source folder setup was run from, then re-runs `install/setup.sh`. It discards local changes in that folder. The manual equivalent is `cd video-reinforcer-2 && git pull && sudo bash install/setup.sh`.
 
 ---
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=Join Tailscale using the auth key on the boot partition
+# Only runs when a key file has been put on the boot partition; the script
+# deletes it after a successful join, so this is a one-off.
+ConditionPathExistsGlob=/boot/firmware/tailscale-authkey*
+Wants=network-online.target
+After=network-online.target tailscaled.service cloud-init.target
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vr-tailscale-up
+# The app doesn't depend on this, so it never holds anything else up.
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target
