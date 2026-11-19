@@ -8,13 +8,18 @@ A Raspberry Pi 4 / Pi 5 kiosk application for video reinforcement audiometry. An
 
 | Component | Requirement |
 |---|---|
-| **Pi model** | Raspberry Pi 5 or Raspberry Pi 4 |
+| **Device** | Raspberry Pi 5 or Pi 4 (tested mainly on Pi 5). Other Linux PCs should work, untested |
 | **Operating system** | Any 64-bit Linux with labwc, seatd, mpv, systemd, and Python 3 |
-| **Monitors** | Up to 2, connected via micro-HDMI; audio delivered over HDMI |
+| **Monitors** | Up to 2, connected via HDMI (or DisplayPort etc. on a PC); audio delivered over HDMI |
 | **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
 | **Config/video storage** | USB stick |
 
-The app itself has no OS-specific code. The Pi requirement comes from the hardware: the HDMI audio device names (`vc4hdmi0`/`vc4hdmi1`) and the vc4 display controller are specific to the Pi 4 and Pi 5. The display device is detected at each boot rather than hard-coded, because its number (`card0`/`card1`) is not stable across reboots on a Pi 4. The app is developed and tested mainly on a Pi 5. The provided setup script (`install/setup.sh`) uses `apt-get` and is written for Debian-based distributions (Raspberry Pi OS, Ubuntu, etc.). On other package managers the dependencies would need to be installed manually before running the app.
+Hardware is detected at every boot (`src/hardware.py`):
+- **Display device:** whichever DRM card has the external ports. On a Pi 4 the card number (`card0`/`card1`) changes between reboots, so it is never hard-coded.
+- **Monitor 1 and 2:** the first two external ports, HDMI before DisplayPort, in port-number order. On a Pi that's `HDMI-A-1` and `HDMI-A-2`.
+- **Audio:** on a Pi, each HDMI port's own sound device (`vc4hdmi0`/`vc4hdmi1`). On other hardware there's no reliable automatic mapping, so the system default sound device is used unless you set one (see [Hardware settings](#hardware-settings)).
+
+The provided setup script (`install/setup.sh`) uses `apt-get` and is written for Debian-based distributions (Raspberry Pi OS, Ubuntu, etc.). On other package managers the dependencies would need to be installed manually before running the app.
 
 ---
 
@@ -147,7 +152,27 @@ Key names are case-insensitive. Common values:
 
 ### Monitor numbering
 
-`1` is the micro-HDMI port closest to the USB-C power connector (labelled HDMI0 on the board, on both the Pi 4 and Pi 5). `2` is the other port.
+`1` is the micro-HDMI port closest to the USB-C power connector (labelled HDMI0 on the board, on both the Pi 4 and Pi 5). `2` is the other port. This can be changed in the hardware settings below.
+
+---
+
+## Hardware settings
+
+Normally nothing needs setting: outputs and audio are detected automatically. To override them, edit `video-reinforcer.conf` on the SD card's boot partition. Plug the SD card into any PC; it's the drive called `bootfs`. The file is `/boot/firmware/video-reinforcer.conf` on the Pi itself. On a non-Pi machine use `/etc/video-reinforcer/hardware.conf` instead.
+
+Setup creates the file with every line commented out. Remove the `#` from the lines you need and reboot:
+
+```ini
+# Swap which physical port is monitor 1 and monitor 2
+MONITOR_1_OUTPUT=HDMI-A-2
+MONITOR_2_OUTPUT=HDMI-A-1
+
+# Sound device for each monitor (list them with: mpv --audio-device=help)
+MONITOR_1_AUDIO=alsa/plughw:CARD=vc4hdmi0,DEV=0
+MONITOR_2_AUDIO=alsa/plughw:CARD=vc4hdmi1,DEV=0
+```
+
+Output names are the DRM connector names, listed by `ls /sys/class/drm/` (e.g. `card1-HDMI-A-1` → `HDMI-A-1`). If you only change the output, the audio follows it automatically on a Pi.
 
 ---
 

@@ -61,8 +61,7 @@ class TestPlay:
 
     def test_returns_false_for_unconnected_monitor(self):
         dm = _make_dm()
-        with patch("src.display_manager.glob.glob", return_value=[]):
-            result = dm.play(2, "/path/to/video.mp4")
+        result = dm.play(2, "/path/to/video.mp4")
         assert result is False
 
     def test_calls_play_on_correct_player(self):
@@ -110,8 +109,7 @@ class TestPlay:
         dm = _make_dm()
         _add_player(dm, 1)
         dm.play(1, "/v1.mp4")
-        with patch("src.display_manager.glob.glob", return_value=[]):
-            dm.play(2, "/v2.mp4")
+        dm.play(2, "/v2.mp4")
         assert dm.playing_monitor == 1  # unchanged
 
 

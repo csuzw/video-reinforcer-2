@@ -1,33 +1,31 @@
 #!/bin/bash
-# Start labwc on the DRM device that actually drives the HDMI ports.
+# Start labwc on the right display device, with window rules for this hardware.
 #
-# The Pi has two DRM devices: v3d (3D GPU, render-only, no outputs) and vc4
-# (the display controller, which owns HDMI-A-1/HDMI-A-2). Which one becomes
-# card0 and which becomes card1 depends on driver probe order. On a Pi 4 it
-# changes from boot to boot. If labwc is pointed at v3d it has no outputs, and
-# the screens stay black while the app waits forever for labwc.
-#
-# So instead of hard-coding a card number, look for the card that has HDMI
-# connectors in sysfs (e.g. /sys/class/drm/card1-HDMI-A-1) and use that.
+# src/hardware.py does the detection (shared with the app so both agree):
+#  - finds the DRM device that drives the external ports. On a Pi the 3D GPU
+#    (v3d, no outputs) and the display controller (vc4) swap between card0 and
+#    card1 across boots, so the number must never be hard-coded;
+#  - writes labwc's rc.xml, mapping monitor 1/2 to the detected outputs (or
+#    the overrides in video-reinforcer.conf).
+APP_DIR=/opt/video-reinforcer
+RC_DIR="$APP_DIR/labwc"
 
-# vc4 can finish probing slightly after this unit starts: wait up to ~10s.
-for _ in $(seq 1 50); do
-    for conn in /sys/class/drm/card*-HDMI-A-*; do
-        [ -e "$conn" ] || continue
-        name="$(basename "$conn")"   # e.g. card1-HDMI-A-1
-        card="${name%%-*}"           # e.g. card1
-        if [ -e "/dev/dri/$card" ]; then
-            echo "labwc-start: using /dev/dri/$card (found $name)"
-            export WLR_DRM_DEVICES="/dev/dri/$card"
-            exec /usr/bin/labwc "$@"
-        fi
-    done
-    sleep 0.2
-done
+card="$(cd "$APP_DIR" && "$APP_DIR/venv/bin/python3" -m src.hardware labwc-setup "$RC_DIR/rc.xml")"
 
-# No HDMI-capable card found. Let wlroots pick a device itself instead of
-# failing outright; LABWC_FALLBACK_OUTPUT keeps labwc running even with no
-# outputs, so the app still starts and the Stream Deck still works.
-echo "labwc-start: no DRM device with HDMI connectors found; letting wlroots auto-detect" >&2
-unset WLR_DRM_DEVICES
-exec /usr/bin/labwc "$@"
+if [ -n "$card" ]; then
+    echo "labwc-start: using $card"
+    export WLR_DRM_DEVICES="$card"
+else
+    # Let wlroots pick a device itself rather than failing outright;
+    # LABWC_FALLBACK_OUTPUT keeps labwc running even with no outputs, so the
+    # app still starts and the Stream Deck still works.
+    echo "labwc-start: no display device with external ports found; letting wlroots auto-detect" >&2
+    unset WLR_DRM_DEVICES
+fi
+
+# The Pi 5 needs libliftoff for DRM plane allocation. Other hardware doesn't.
+if grep -qa "Raspberry Pi 5" /proc/device-tree/model 2>/dev/null; then
+    export WLR_DRM_FORCE_LIBLIFTOFF=1
+fi
+
+exec /usr/bin/labwc -C "$RC_DIR" "$@"

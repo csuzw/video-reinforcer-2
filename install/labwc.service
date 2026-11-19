@@ -19,11 +19,10 @@ User=root
 Environment=XDG_RUNTIME_DIR=/run/labwc
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=WLR_BACKENDS=drm
-# WLR_DRM_DEVICES is set by labwc-start.sh: it picks the vc4 display
-# controller (the card with HDMI connectors). The card number is not stable
-# across boots on a Pi 4, so it must not be hard-coded here.
-# libliftoff for DRM plane allocation (required on Pi 5, harmless on Pi 4)
-Environment=WLR_DRM_FORCE_LIBLIFTOFF=1
+# labwc-start.sh sets the hardware-specific parts: WLR_DRM_DEVICES (the card
+# that drives the external ports; its number is not stable across boots on a
+# Pi 4, so it must not be hard-coded here), WLR_DRM_FORCE_LIBLIFTOFF (Pi 5
+# only) and the generated rc.xml window rules.
 # Keep compositor running even with no physical outputs connected
 Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
 # Use seatd for seat management (bypasses logind session requirement).
@@ -32,7 +31,7 @@ Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
 Environment=LIBSEAT_BACKEND=seatd
 RuntimeDirectory=labwc
 RuntimeDirectoryMode=0755
-ExecStart=/opt/video-reinforcer/labwc-start.sh -C /opt/video-reinforcer/labwc
+ExecStart=/opt/video-reinforcer/labwc-start.sh
 Restart=on-failure
 RestartSec=3
 

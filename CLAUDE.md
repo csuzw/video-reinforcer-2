@@ -46,6 +46,7 @@ README changes should be included in the same commit as the code change.
 main.py              — event loop, state machine, wires everything together
 config_loader.py     — parses + validates config.json from USB stick
 usb_monitor.py       — pyudev watcher for USB mount/unmount
+hardware.py          — detects display card, monitor outputs, audio devices; overrides; generates labwc rc.xml
 video_player.py      — one persistent mpv process per monitor; IPC + watchdog
 display_manager.py   — coordinates video players; detects monitor connect/disconnect
 deck_manager.py      — Stream Deck input + USB hotplug detection; reconnects automatically

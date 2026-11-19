@@ -1,11 +1,12 @@
 #!/bin/bash
-# Video Reinforcer — Raspberry Pi 4 / 5 setup script
+# Video Reinforcer — setup script (Raspberry Pi 4 / 5, or any Debian-based Linux)
 # Run as root: sudo bash setup.sh
 set -e
 
 APP_DIR="/opt/video-reinforcer"
 MOUNT_POINT="/mnt/vr-usb"
 SERVICE="video-reinforcer"
+BOOT_DIR="/boot/firmware"   # Raspberry Pi boot partition (FAT, editable from any PC)
 
 echo "=== Video Reinforcer Setup ==="
 
@@ -13,10 +14,13 @@ echo "=== Video Reinforcer Setup ==="
 apt-get update
 apt-get install -y \
     mpv \
+    ffmpeg \
     labwc \
     seatd \
     python3-pip \
+    python3-venv \
     python3-dev \
+    gcc \
     libhidapi-libusb0 \
     libudev-dev \
     fonts-dejavu-core
@@ -36,6 +40,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_SRC="$(dirname "$SCRIPT_DIR")"
 
 mkdir -p "$APP_DIR"
+rm -rf "$APP_DIR/src"
 cp -r "$APP_SRC/src" "$APP_DIR/"
 cp "$APP_SRC/requirements.txt" "$APP_DIR/"
 
@@ -45,7 +50,7 @@ python3 -m venv "$APP_DIR/venv"
 
 # ---- Blank video for OSD error display ----
 # A 1-second looping black video that error messages are overlaid on via mpv OSD.
-ffmpeg -y \
+ffmpeg -y -loglevel error \
     -f lavfi -i "color=black:size=1920x1080:rate=1" \
     -f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100" \
     -t 1 -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p \
@@ -73,19 +78,26 @@ else
 fi
 systemctl disable --now lightdm gdm gdm3 sddm xdm lxdm 2>/dev/null || true
 
-# ---- Kernel console tweaks ----
+# ---- Kernel console tweaks (Raspberry Pi only) ----
 # The kernel's own framebuffer console (vc4drmfb) grabs DRM master at boot and
 # never releases it, so labwc gets "Device or resource busy" / "Permission
 # denied" on every commit and the screen is stuck on the raw text console.
 # Redirecting fbcon to fb1 (absent on this hardware) keeps it off the real
 # DRM device, leaving master free for labwc to claim immediately.
-sed -i 's/ console=tty1//' /boot/firmware/cmdline.txt 2>/dev/null || true
-sed -i 's/ vt.global_cursor_default=0//' /boot/firmware/cmdline.txt 2>/dev/null || true
-if ! grep -q "fbcon=map:1" /boot/firmware/cmdline.txt 2>/dev/null; then
-    sed -i 's/$/ fbcon=map:1/' /boot/firmware/cmdline.txt
+CMDLINE="$BOOT_DIR/cmdline.txt"
+if [ -f "$CMDLINE" ]; then
+    sed -i 's/ console=tty1//; s/ vt.global_cursor_default=0//' "$CMDLINE"
+    grep -q "fbcon=map:1" "$CMDLINE" || sed -i 's/$/ fbcon=map:1/' "$CMDLINE"
+    grep -q "consoleblank=0" "$CMDLINE" || sed -i 's/$/ consoleblank=0/' "$CMDLINE"
+else
+    echo "No $CMDLINE (not a Raspberry Pi?) — skipping kernel console tweaks"
 fi
-if ! grep -q "consoleblank=0" /boot/firmware/cmdline.txt 2>/dev/null; then
-    sed -i 's/$/ consoleblank=0/' /boot/firmware/cmdline.txt
+
+# ---- Hardware override file (example, all commented out) ----
+# Lives on the boot partition so it can be edited from any PC. Never
+# overwrites an existing file.
+if [ -d "$BOOT_DIR" ] && [ ! -e "$BOOT_DIR/video-reinforcer.conf" ]; then
+    cp "$SCRIPT_DIR/video-reinforcer.conf.example" "$BOOT_DIR/video-reinforcer.conf"
 fi
 
 # ---- Auto-login on tty1 (app runs via systemd, not login shell, but useful for debug) ----
@@ -96,10 +108,10 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
 EOF
 
-# ---- Deploy labwc kiosk config ----
+# ---- labwc launcher ----
+# rc.xml (window rules) is generated at every boot by labwc-start.sh from the
+# detected hardware, so it is not installed here.
 mkdir -p "$APP_DIR/labwc"
-cp "$SCRIPT_DIR/labwc/rc.xml" "$APP_DIR/labwc/rc.xml"
-# Launcher that points labwc at the HDMI display device (card number varies by boot on Pi 4)
 cp "$SCRIPT_DIR/labwc-start.sh" "$APP_DIR/labwc-start.sh"
 sed -i 's/\r$//' "$APP_DIR/labwc-start.sh"  # tolerate a Windows checkout
 chmod 755 "$APP_DIR/labwc-start.sh"

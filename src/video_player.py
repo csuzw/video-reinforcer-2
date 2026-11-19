@@ -13,19 +13,9 @@ _SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
 _BLANK_VIDEO = "/opt/video-reinforcer/blank.mp4"
 _WATERMARK_ID = 1  # osd-overlay ID; must be unique per mpv instance
 
-# Wayland output names / DRM connector names on Pi 5.
-# HDMI-A-1 is the port closest to the USB-C power connector.
-# Used both as the labwc MoveToOutput target and for sysfs hot-plug detection.
-CONNECTORS = {
-    1: "HDMI-A-1",
-    2: "HDMI-A-2",
-}
-
-# ALSA audio devices matching each HDMI port (vc4hdmi0 = HDMI-A-1, vc4hdmi1 = HDMI-A-2)
-AUDIO_DEVICES = {
-    1: "alsa/plughw:CARD=vc4hdmi0,DEV=0",
-    2: "alsa/plughw:CARD=vc4hdmi1,DEV=0",
-}
+# Which output each window lands on is decided by labwc window rules matching
+# --wayland-app-id (generated at boot by src/hardware.py). The audio device is
+# also resolved there and passed in.
 
 
 class VideoPlayer:
@@ -35,9 +25,15 @@ class VideoPlayer:
     unplugged) or if a video fails to play (corrupt/unsupported file).
     """
 
-    def __init__(self, monitor: int, on_error: Callable[[int, str], None]):
+    def __init__(
+        self,
+        monitor: int,
+        on_error: Callable[[int, str], None],
+        audio_device: Optional[str] = None,
+    ):
         self.monitor = monitor
         self._on_error = on_error
+        self._audio_device = audio_device
         self._socket_path = _SOCKET_TEMPLATE.format(monitor=monitor)
         self._process: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
@@ -49,7 +45,7 @@ class VideoPlayer:
         if os.path.exists(self._socket_path):
             os.remove(self._socket_path)
 
-        audio_device = AUDIO_DEVICES.get(self.monitor)
+        audio_device = self._audio_device
         cmd = [
             "mpv",
             "--vo=gpu",
