@@ -283,8 +283,9 @@ sudo reboot
 journalctl -t video-reinforcer -f
 journalctl -t labwc -b
 
-# Both together, plus greetd, for this boot
-journalctl -b -t video-reinforcer -t labwc -u greetd
+# Both together for this boot, then greetd (the login manager) on its own
+journalctl -b -t video-reinforcer -t labwc
+journalctl -b -u greetd
 
 # Is the kiosk session running?
 loginctl list-sessions
@@ -325,7 +326,8 @@ Every error state is shown on screen in plain English. The app recovers automati
 
 Log in over SSH, or press Ctrl+Alt+F1 for a text console, and collect:
 ```bash
-journalctl -b -t video-reinforcer -t labwc -u greetd --no-pager | tail -100
+journalctl -b -t video-reinforcer -t labwc --no-pager | tail -100
+journalctl -b -u greetd --no-pager
 loginctl list-sessions
 ```
 - No session for the kiosk user, or greetd errors: greetd isn't set up. Re-run `sudo bash install/setup.sh` and reboot.
