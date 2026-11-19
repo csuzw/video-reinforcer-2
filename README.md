@@ -132,7 +132,7 @@ Stops the app cleanly and starts the normal desktop as the same user (on Raspber
 | `key` | No | Keyboard key that triggers quit |
 | `button.*` | No | Appearance of the quit key on the Stream Deck (same fields as above) |
 
-Either or both of `stream_deck_button` and `key` can be specified. If `quit` is omitted entirely, there is no quit button — use SSH instead.
+Either or both of `stream_deck_button` and `key` can be specified. If `quit` is omitted entirely, there is no quit button: get to a terminal with Ctrl+Alt+F2 or SSH instead (see [Getting back to the desktop or a shell](#getting-back-to-the-desktop-or-a-shell)).
 
 ### Using a keyboard only (no Stream Deck)
 
@@ -188,14 +188,19 @@ Output names are the DRM connector names, listed by `ls /sys/class/drm/` (e.g. `
 
 The easiest option is [Raspberry Pi OS](https://www.raspberrypi.com/software/) (Lite or Desktop, 64-bit), flashed with Raspberry Pi Imager. When prompted:
 
-- **Enable SSH** in the advanced options
 - Set a hostname, username, and password
+- **Enable SSH** in the advanced options (optional, but handy for remote maintenance)
 
 Other Debian-based distributions should work too, as long as they package `labwc`, `greetd`, `udisks2`, `mpv`, `ffmpeg` and `python3`.
 
 ### 2. Clone and run setup
 
-SSH into the Pi, then:
+Open a terminal on the Pi in one of these ways:
+- **Over SSH:** `ssh <username>@<pi-hostname>`
+- **On the Pi's desktop** (Raspberry Pi OS Desktop): open Terminal from the menu
+- **With a keyboard plugged into the Pi**, if there's no desktop or the kiosk is already on screen: press Ctrl+Alt+F2 and log in with your username and password
+
+Then:
 
 ```bash
 git clone https://github.com/csuzw/video-reinforcer-2.git
@@ -212,7 +217,7 @@ The setup script:
 - Configures greetd to log that user in at boot, and makes greetd the display manager in place of the desktop's own (e.g. `lightdm`)
 - Removes the previous design's leftovers if found: the `labwc` and `video-reinforcer` system services, seatd, the root autologin on tty1, and `fbcon=map:1` in `cmdline.txt`
 
-When run over SSH, setup starts the kiosk straight away. When run from a terminal on the desktop, it doesn't, because that would close the desktop it's running in. Reboot instead.
+When run over SSH or from a Ctrl+Alt+F2 text console, setup starts the kiosk straight away and the screen switches to it (press Ctrl+Alt+F2 to get back to your console). When run from a terminal on the desktop, it doesn't, because that would close the desktop it's running in. Reboot instead.
 
 ### 3. Insert the USB stick and reboot
 
@@ -226,11 +231,15 @@ The Pi boots directly into the app. Insert your configured USB stick and the but
 
 ## Updating the app
 
+From a terminal on the Pi (SSH, or Ctrl+Alt+F2 with a keyboard; see [Installation](#2-clone-and-run-setup)):
+
 ```bash
 cd video-reinforcer-2
 git pull
-sudo bash install/setup.sh
+sudo bash install/setup.sh && sudo reboot
 ```
+
+The reboot isn't strictly needed (setup restarts the kiosk itself), but it confirms the Pi comes up cleanly from cold. Upgrading from a version before the greetd session works the same way; see [Troubleshooting](#troubleshooting).
 
 ---
 
@@ -259,13 +268,11 @@ If a quit button is configured in `config.json`, pressing it stops the app clean
 
 ### From a keyboard
 
-Ctrl+Alt+F1 switches to a text console where you can log in. Ctrl+Alt+F7 switches back to the kiosk.
+Ctrl+Alt+F2 switches to a text console where you can log in. Ctrl+Alt+F7 switches back to the kiosk.
 
-### Via SSH
+### Via SSH or a text console
 
 ```bash
-ssh <username>@<pi-hostname>
-
 # Restart the kiosk (also picks up a re-run of setup.sh)
 sudo systemctl restart greetd
 
@@ -321,10 +328,12 @@ Every error state is shown on screen in plain English. The app recovers automati
 **Video plays but no audio**
 - Ensure the monitor's volume is turned up.
 - Check the correct monitor is assigned in `config.json` — monitor `1` is the port nearest the power connector.
+- The app plays sound straight to each monitor's own sound device, and switches PipeWire (the desktop's sound server) off while the kiosk runs so it can't hold those devices. Errors from mpv, including sound device errors, are in the log: `journalctl -t video-reinforcer -b`
+- On non-Pi hardware, set the sound device for each monitor in the [hardware settings](#hardware-settings).
 
 **The kiosk doesn't appear after boot (boot messages, a login prompt, or a blank screen)**
 
-Log in over SSH, or press Ctrl+Alt+F1 for a text console, and collect:
+Log in over SSH, or press Ctrl+Alt+F2 on a keyboard plugged into the Pi for a text console, and collect:
 ```bash
 journalctl -b -t video-reinforcer -t labwc --no-pager | tail -100
 journalctl -b -u greetd --no-pager
@@ -341,4 +350,6 @@ loginctl list-sessions
 
 **Upgrading from a version before the greetd session**
 
-Earlier versions ran labwc and the app as root system services, with workarounds for boot timing (seatd, splash-screen ordering, `fbcon=map:1`, DRM card detection). Those caused the "fine on first boot, stuck after a restart" problems, especially on a Pi 4. Re-running `sudo bash install/setup.sh` removes all of them and switches to the greetd session. Reboot afterwards.
+Earlier versions ran labwc and the app as root system services, with workarounds for boot timing (seatd, splash-screen ordering, `fbcon=map:1`, DRM card detection). Those caused the "fine on first boot, stuck after a restart" problems, especially on a Pi 4. Updating the app (`git pull`, then `sudo bash install/setup.sh`) removes all of them and switches to the greetd session. Reboot afterwards.
+
+If the old version is stuck on boot messages, plug a keyboard into the Pi and press Ctrl+Alt+F2 to get a login prompt for running the update.
