@@ -254,21 +254,18 @@ class TestRequiresDeck:
 
 class TestButtonPaths:
     def test_video_path_prepends_mount(self, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", "/mnt/test")
-        config = _parse({"buttons": {"0": {"video": "videos/clip.mp4"}}})
+        config = _parse({"buttons": {"0": {"video": "videos/clip.mp4"}}}, "/mnt/test")
         assert config.buttons[0].video_path() == "/mnt/test/videos/clip.mp4"
 
     def test_image_path_prepends_mount_when_image_style(self, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", "/mnt/test")
         config = _parse({"buttons": {"0": {
             "video": "v.mp4",
             "button": {"type": "image", "image": "btn.png"},
-        }}})
+        }}}, "/mnt/test")
         assert config.buttons[0].image_path() == "/mnt/test/btn.png"
 
     def test_image_path_is_none_for_color_style(self, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", "/mnt/test")
-        config = _parse({"buttons": {"0": {"video": "v.mp4"}}})
+        config = _parse({"buttons": {"0": {"video": "v.mp4"}}}, "/mnt/test")
         assert config.buttons[0].image_path() is None
 
 
@@ -278,19 +275,16 @@ class TestButtonPaths:
 
 class TestLoadConfig:
     def test_raises_when_config_missing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", str(tmp_path))
         with pytest.raises(ConfigError, match="not found"):
-            load_config()
+            load_config(str(tmp_path))
 
     def test_raises_on_invalid_json(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", str(tmp_path))
         (tmp_path / "config.json").write_text("{ not valid json }")
         with pytest.raises(ConfigError, match="Invalid JSON"):
-            load_config()
+            load_config(str(tmp_path))
 
     def test_loads_valid_config_from_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("src.config_loader.USB_MOUNT", str(tmp_path))
         data = {"buttons": {"0": {"video": "v.mp4", "monitor": 1}}}
         (tmp_path / "config.json").write_text(json.dumps(data))
-        config = load_config()
+        config = load_config(str(tmp_path))
         assert len(config.buttons) == 1

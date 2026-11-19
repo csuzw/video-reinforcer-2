@@ -10,26 +10,19 @@ boot partition, which can be edited from any PC:
     MONITOR_1_AUDIO=alsa/plughw:CARD=vc4hdmi0,DEV=0
     MONITOR_2_AUDIO=alsa/plughw:CARD=vc4hdmi1,DEV=0
 
-Also runnable as a script, used by labwc-start.sh before labwc starts:
-
-    python3 -m src.hardware labwc-setup <rc.xml path>
-
-which waits for the display device, writes the labwc window rules that place
-each monitor's mpv window on its output, and prints the /dev/dri/cardN path.
+The output name is passed to mpv (--fs-screen-name), which asks the
+compositor to fullscreen its window on that output.
 """
 import glob
 import logging
 import os
 import re
-import sys
-import time
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
 DRM_ROOT = "/sys/class/drm"
-DEV_DRI = "/dev/dri"
 ASOUND_CARDS = "/proc/asound/cards"
 CONFIG_PATHS = (
     "/boot/firmware/video-reinforcer.conf",
@@ -70,21 +63,6 @@ def _port_connectors(drm_root: str) -> Dict[str, List[Tuple[int, int, str]]]:
     for conns in cards.values():
         conns.sort()
     return cards
-
-
-def display_card(drm_root: Optional[str] = None, dev_dri: Optional[str] = None) -> Optional[str]:
-    """Path of the DRM device that drives the external ports, e.g. /dev/dri/card1.
-
-    On a Pi the 3D GPU (v3d, no outputs) and the display controller (vc4) can
-    swap between card0 and card1 across boots, so never hard-code the number.
-    """
-    drm_root = drm_root or DRM_ROOT
-    dev_dri = dev_dri or DEV_DRI
-    for card in sorted(_port_connectors(drm_root)):
-        dev = os.path.join(dev_dri, card)
-        if os.path.exists(dev):
-            return dev
-    return None
 
 
 def detected_outputs(drm_root: Optional[str] = None) -> List[str]:
@@ -188,62 +166,3 @@ def resolve_monitors(
         audio = overrides.get(f"MONITOR_{idx}_AUDIO") or detected_audio_device(output, cards_file)
         monitors[idx] = Monitor(index=idx, output=output, audio_device=audio)
     return monitors
-
-
-# ----------------------------------------------------------------------
-# labwc config
-# ----------------------------------------------------------------------
-
-def labwc_rc_xml(monitors: Dict[int, Monitor]) -> str:
-    """labwc window rules placing mpv-mon-N on monitor N's output.
-
-    MoveToOutput must fire before ToggleFullscreen: labwc refuses to move a
-    window that is already fullscreen, so mpv is started WITHOUT --fullscreen.
-    matchOnce="true" so each rule only fires on first map.
-    """
-    rules = "".join(
-        f'    <windowRule identifier="mpv-mon-{m.index}" matchOnce="true">\n'
-        f'      <action name="MoveToOutput" output="{m.output}"/>\n'
-        f'      <action name="ToggleFullscreen"/>\n'
-        f'      <action name="HideCursor"/>\n'
-        f'    </windowRule>\n'
-        for m in sorted(monitors.values(), key=lambda m: m.index)
-    )
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<!-- Generated at boot by src/hardware.py; edits here are overwritten. -->\n'
-        '<openbox_config xmlns="http://openbox.org/3.4/rc">\n'
-        '  <windowRules>\n'
-        f'{rules}'
-        '  </windowRules>\n'
-        '</openbox_config>\n'
-    )
-
-
-def _labwc_setup(rc_path: str, wait_seconds: float = 10.0) -> int:
-    # The display driver can finish probing slightly after boot reaches us.
-    deadline = time.monotonic() + wait_seconds
-    card = display_card()
-    while card is None and time.monotonic() < deadline:
-        time.sleep(0.2)
-        card = display_card()
-
-    monitors = resolve_monitors()
-    for m in monitors.values():
-        log.info("Monitor %d -> output %s, audio %s", m.index, m.output, m.audio_device or "default")
-    if card is None:
-        log.warning("No display device with external ports found")
-
-    os.makedirs(os.path.dirname(rc_path) or ".", exist_ok=True)
-    with open(rc_path, "w") as f:
-        f.write(labwc_rc_xml(monitors))
-    print(card or "")
-    return 0
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="hardware: %(message)s", stream=sys.stderr)
-    if len(sys.argv) == 3 and sys.argv[1] == "labwc-setup":
-        sys.exit(_labwc_setup(sys.argv[2]))
-    print("usage: python3 -m src.hardware labwc-setup <rc.xml path>", file=sys.stderr)
-    sys.exit(2)

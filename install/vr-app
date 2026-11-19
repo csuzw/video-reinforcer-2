@@ -1,0 +1,19 @@
+#!/bin/sh
+# Runs the Video Reinforcer app for the life of the kiosk session (started by
+# labwc -S from vr-session). Restarts it after a crash; stops on a clean exit.
+APP_DIR=/opt/video-reinforcer
+QUIT_FLAG="${XDG_RUNTIME_DIR:-/tmp}/video-reinforcer-quit"
+EXIT_QUIT=10  # keep in sync with EXIT_QUIT in src/main.py
+
+cd "$APP_DIR" || exit 1
+while :; do
+    systemd-cat -t video-reinforcer "$APP_DIR/venv/bin/python3" -m src.main
+    status=$?
+    case "$status" in
+        0) exit 0 ;;                                # stopped (session ending)
+        "$EXIT_QUIT") touch "$QUIT_FLAG"; exit 0 ;; # quit button/key
+    esac
+    echo "App exited with status $status; restarting it in 5 seconds" \
+        | systemd-cat -t video-reinforcer -p err
+    sleep 5
+done

@@ -9,13 +9,12 @@ A Raspberry Pi 4 / Pi 5 kiosk application for video reinforcement audiometry. An
 | Component | Requirement |
 |---|---|
 | **Device** | Raspberry Pi 5 or Pi 4 (tested mainly on Pi 5). Other Linux PCs should work, untested |
-| **Operating system** | Any 64-bit Linux with labwc, seatd, mpv, systemd, and Python 3 |
+| **Operating system** | Raspberry Pi OS (Lite or Desktop, 64-bit), or any Debian-based Linux with systemd that packages labwc, greetd, udisks2, mpv and Python 3 |
 | **Monitors** | Up to 2, connected via HDMI (or DisplayPort etc. on a PC); audio delivered over HDMI |
 | **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
 | **Config/video storage** | USB stick |
 
-Hardware is detected at every boot (`src/hardware.py`):
-- **Display device:** whichever DRM card has the external ports. On a Pi 4 the card number (`card0`/`card1`) changes between reboots, so it is never hard-coded.
+Hardware is detected every time the app starts (`src/hardware.py`):
 - **Monitor 1 and 2:** the first two external ports, HDMI before DisplayPort, in port-number order. On a Pi that's `HDMI-A-1` and `HDMI-A-2`.
 - **Audio:** on a Pi, each HDMI port's own sound device (`vc4hdmi0`/`vc4hdmi1`). On other hardware there's no reliable automatic mapping, so the system default sound device is used unless you set one (see [Hardware settings](#hardware-settings)).
 
@@ -35,9 +34,16 @@ The provided setup script (`install/setup.sh`) uses `apt-get` and is written for
 
 ### Architecture
 
-The app runs as a systemd service. It starts **labwc** (the default Wayland compositor on Raspberry Pi OS Bookworm) to drive both HDMI outputs, then launches a persistent **mpv** process per monitor. labwc places each mpv window on the correct output and fullscreens it. The Python process manages config loading, USB hot-plug, Stream Deck input, and IPC to each mpv instance.
+The kiosk is an ordinary auto-login desktop session, set up the same way a normal desktop login works:
 
-When the app stops (via the quit button or `systemctl stop`), the desktop display manager restarts automatically.
+1. **greetd** (a small login manager) logs the kiosk user in at boot. By default that's the user who ran setup, e.g. the one created in Raspberry Pi Imager.
+2. The session (`install/vr-session`) starts **labwc**, the Wayland compositor that Raspberry Pi OS's own desktop uses. labwc in turn runs the app (`install/vr-app`).
+3. The app starts a persistent **mpv** process per monitor. Each mpv asks labwc to make it fullscreen on its monitor's output.
+4. The Python process handles config loading, USB hot-plug, Stream Deck and keyboard input, and controls each mpv over IPC.
+
+Nothing runs as root. logind, the standard Linux session manager, gives the session the display, keyboard and sound devices. udisks2, the standard way desktops mount removable drives, mounts the USB stick read-only under `/media/<user>/`.
+
+If the app crashes it is restarted within a few seconds, and so is labwc. Pressing the quit button ends the kiosk and starts the normal desktop, if one is installed.
 
 ---
 
@@ -118,7 +124,7 @@ Buttons not listed in `config.json` remain dark on the Stream Deck.
 
 ### `quit` (optional)
 
-Stops the app cleanly and returns to the desktop. The service does not restart until the Pi is rebooted or the service is started manually via SSH.
+Stops the app cleanly and starts the normal desktop as the same user (on Raspberry Pi OS Lite, which has no desktop, you get a text login prompt instead). The kiosk starts again at the next reboot.
 
 | Field | Required | Description |
 |---|---|---|
@@ -185,7 +191,7 @@ The easiest option is [Raspberry Pi OS](https://www.raspberrypi.com/software/) (
 - **Enable SSH** in the advanced options
 - Set a hostname, username, and password
 
-Any other 64-bit Linux distribution works provided `labwc`, `seatd`, `mpv`, `ffmpeg`, `python3`, and `libhidapi` are available.
+Other Debian-based distributions should work too, as long as they package `labwc`, `greetd`, `udisks2`, `mpv`, `ffmpeg` and `python3`.
 
 ### 2. Clone and run setup
 
@@ -198,11 +204,15 @@ sudo bash install/setup.sh
 ```
 
 The setup script:
-- Installs system packages: `mpv`, `labwc`, `seatd`, Python dev tools, HID libraries
+- Installs system packages: `mpv`, `labwc`, `greetd`, `udisks2`, Python dev tools, HID libraries
 - Deploys the app to `/opt/video-reinforcer`
 - Generates a blank video used as the OSD background
-- Disables any running desktop display manager (saves its name so it can be restored when the app exits)
-- Installs and enables three systemd services: `seatd`, `labwc`, and `video-reinforcer`
+- Picks the kiosk user: the user who ran `sudo`. Set `VR_USER=name` to choose a different one (it's created if it doesn't exist): `sudo VR_USER=kiosk bash install/setup.sh`
+- Adds that user to the `input` group, so the app can read the keyboard
+- Configures greetd to log that user in at boot, and makes greetd the display manager in place of the desktop's own (e.g. `lightdm`)
+- Removes the previous design's leftovers if found: the `labwc` and `video-reinforcer` system services, seatd, the root autologin on tty1, and `fbcon=map:1` in `cmdline.txt`
+
+When run over SSH, setup starts the kiosk straight away. When run from a terminal on the desktop, it doesn't, because that would close the desktop it's running in. Reboot instead.
 
 ### 3. Insert the USB stick and reboot
 
@@ -245,48 +255,40 @@ No app update needed — just edit the files on the USB stick from any PC, then 
 
 ### Via the quit button
 
-If a quit button is configured in `config.json`, pressing it stops the app cleanly. The desktop display manager restarts automatically and you can log in normally.
+If a quit button is configured in `config.json`, pressing it stops the app cleanly and starts the normal desktop as the kiosk user. On a system with no desktop you get a text login prompt instead. The kiosk starts again at the next reboot.
+
+### From a keyboard
+
+Ctrl+Alt+F1 switches to a text console where you can log in. Ctrl+Alt+F7 switches back to the kiosk.
 
 ### Via SSH
 
 ```bash
 ssh <username>@<pi-hostname>
 
-# Stop the app (labwc keeps the screen — it does NOT return to the desktop;
-# see note below for why this is a separate, deliberate step)
-sudo systemctl stop video-reinforcer
+# Restart the kiosk (also picks up a re-run of setup.sh)
+sudo systemctl restart greetd
 
-# Get the desktop back, if you need it (DM name saved by setup.sh)
-sudo systemctl start "$(cat /opt/video-reinforcer/display-manager)"
-
-# Prevent it from starting on next boot
-sudo systemctl disable video-reinforcer
-
-# Re-enable and start it again
-sudo systemctl enable video-reinforcer && sudo systemctl start video-reinforcer
+# Going back to the normal desktop permanently (Raspberry Pi OS Desktop)
+sudo systemctl disable greetd
+sudo systemctl enable --force lightdm
+sudo reboot
+# ...and to return to the kiosk later, re-run: sudo bash install/setup.sh
 ```
-
-> **Why the display-manager handoff isn't automatic on `systemctl stop`:** it
-> only happens from the in-app quit button/key (`App._quit`/
-> `_restore_display_manager`, ordered safely against `labwc.service` via
-> `Before=` — see `labwc.service`). An `ExecStopPost` hook that did this
-> automatically would also fire on `systemctl restart` (used when deploying
-> updates) and on `Restart=on-failure` crash recovery, racing the new instance
-> for DRM master and potentially leaving the kiosk stuck on the desktop
-> instead of auto-recovering — exactly what this app must never do. If you
-> need the desktop after an SSH stop, start it explicitly as shown above.
 
 ### Useful commands
 
 ```bash
-# View live logs
-journalctl -u video-reinforcer -f
+# View live logs (app, then compositor)
+journalctl -t video-reinforcer -f
+journalctl -t labwc -b
 
-# Check service status
-systemctl status video-reinforcer
+# Both together, plus greetd, for this boot
+journalctl -b -t video-reinforcer -t labwc -u greetd
 
-# Check compositor status
-systemctl status labwc
+# Is the kiosk session running?
+loginctl list-sessions
+systemctl status greetd
 ```
 
 ---
@@ -319,54 +321,22 @@ Every error state is shown on screen in plain English. The app recovers automati
 - Ensure the monitor's volume is turned up.
 - Check the correct monitor is assigned in `config.json` — monitor `1` is the port nearest the power connector.
 
-**App doesn't start on boot**
+**The kiosk doesn't appear after boot (boot messages, a login prompt, or a blank screen)**
+
+Log in over SSH, or press Ctrl+Alt+F1 for a text console, and collect:
 ```bash
-systemctl status video-reinforcer
-systemctl status labwc
-journalctl -u video-reinforcer -b
+journalctl -b -t video-reinforcer -t labwc -u greetd --no-pager | tail -100
+loginctl list-sessions
 ```
-- Re-running `sudo bash install/setup.sh` will reinstall and restart everything.
+- No session for the kiosk user, or greetd errors: greetd isn't set up. Re-run `sudo bash install/setup.sh` and reboot.
+- labwc errors: the compositor couldn't start on the display. The log says why.
+- App errors: the Python app is failing and being restarted every few seconds. The log shows the traceback.
 
-**Monitors stay blank after boot (no error message)**
-- labwc may have failed to start. Check: `systemctl status labwc`
-- If labwc crashed, check: `journalctl -u labwc -b`
+**USB stick not detected (the error stays on screen with the stick inserted)**
+- The stick is mounted by udisks2, which only mounts for the user of the active session on the screen. Check the kiosk session is the active one: `loginctl list-sessions`, then `loginctl show-session <id> -p Active`.
+- The log shows each mount attempt: `journalctl -t video-reinforcer | grep -i usb`
+- The stick must be FAT32, exFAT or NTFS (or any filesystem Linux reads), with `config.json` at its root.
 
-**Black screen after a reboot, Stream Deck still shows the Elgato logo**
-- The app never started because labwc couldn't find the HDMI outputs. The
-  Elgato logo gives it away: the app clears it as soon as it starts.
-- Cause: the Pi has two DRM devices, the 3D GPU (`v3d`, no outputs) and the
-  display controller (`vc4`, which owns the HDMI ports). Which one is `card0`
-  and which is `card1` can swap between boots, especially on a Pi 4. Older
-  versions hard-coded `/dev/dri/card1`, so they worked on some boots and showed
-  a black screen on others.
-- Fixed: `labwc-start.sh` now picks whichever card has the HDMI connectors on
-  every boot. Update with `git pull && sudo bash install/setup.sh`, then reboot.
-- To check which card was picked: `journalctl -u labwc -b | grep labwc-start`
+**Upgrading from a version before the greetd session**
 
-**Pi boots to a text console / login prompt instead of the kiosk app**
-- All services may show as "active" yet nothing is on screen — something else
-  held DRM master when labwc started, so it can never render
-  (`journalctl -u labwc -b` shows repeated `drmModeAtomicCommit: Permission
-  denied` and `journalctl -u seatd -b` shows `Could not make device fd drm
-  master: Device or resource busy`). The screen then just shows the kernel's
-  raw console (with the autologin root shell on top).
-- Two known causes, both fixed by the current `setup.sh`/`labwc.service`:
-  - The kernel's own framebuffer console (`vc4drmfb`) binding to the real
-    display — fixed by `fbcon=map:1` in `/boot/firmware/cmdline.txt`
-    (redirects it to a non-existent `fb1`, so it never claims the real device).
-  - Plymouth (boot splash) still holding master when labwc starts — fixed by
-    `labwc.service` ordering itself `After=plymouth-quit.service`, the same
-    dependency display managers like lightdm use.
-- If you hit this after manually editing service files, re-run
-  `sudo bash install/setup.sh` to reinstall them and reboot.
-
-**Quitting the app shows a black screen instead of the desktop**
-- This is the same DRM master race as above, just on the way out: the desktop
-  display manager (e.g. `lightdm`) started before `labwc` had fully released
-  DRM master, so neither could render anything.
-- Fixed by adding `Before=` alongside `Conflicts=` in `labwc.service` for each
-  display manager — this guarantees labwc's shutdown is ordered ahead of the
-  display manager's startup (per `systemd.unit(5)`, `Conflicts=` alone does
-  not imply ordering).
-- If you hit this after manually editing `labwc.service`, re-run
-  `sudo bash install/setup.sh` to reinstall it and reboot.
+Earlier versions ran labwc and the app as root system services, with workarounds for boot timing (seatd, splash-screen ordering, `fbcon=map:1`, DRM card detection). Those caused the "fine on first boot, stuck after a restart" problems, especially on a Pi 4. Re-running `sudo bash install/setup.sh` removes all of them and switches to the greetd session. Reboot afterwards.

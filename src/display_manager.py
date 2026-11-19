@@ -52,6 +52,7 @@ class DisplayManager:
         return VideoPlayer(
             monitor,
             on_error=self._handle_player_error,
+            output=m.output if m else None,
             audio_device=m.audio_device if m else None,
         )
 
@@ -131,7 +132,7 @@ class DisplayManager:
     def _hotplug_watcher(self):
         """Poll sysfs every second for HDMI connect/disconnect events.
 
-        Under the Wayland/labwc architecture mpv does not exit when a monitor
+        Under Wayland mpv does not exit when a monitor
         is unplugged (the compositor moves its window), so we cannot rely on
         the VideoPlayer watchdog alone.  This thread detects the physical
         connector state and explicitly stops/starts players as needed.
@@ -167,8 +168,8 @@ class DisplayManager:
                     with self._lock:
                         already = monitor_idx in self._players
                     if not already:
-                        # Brief pause lets labwc register the new output
-                        # before the mpv window tries to move to it.
+                        # Brief pause lets the compositor register the new output
+                        # before mpv asks to go fullscreen on it.
                         time.sleep(2)
                         player = self._new_player(monitor_idx)
                         player.start()

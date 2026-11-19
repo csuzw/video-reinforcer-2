@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- labwc settings for the Video Reinforcer kiosk session.
+
+     Window placement needs no rules here: each mpv asks to be fullscreen on
+     its monitor's output (mpv's fs-screen-name option), which labwc
+     honours. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <keyboard>
+    <!-- No compositor shortcuts (Alt+F4 closes windows, Alt+Tab switches,
+         etc.), so a keyboard used for the app's key bindings can't break
+         the kiosk. labwc loads its default shortcuts when rc.xml has no
+         keybind at all, so this one does nothing on an unused key.
+         Ctrl+Alt+F1..F12 still switch to text consoles. -->
+    <keybind key="XF86Launch9">
+      <action name="None"/>
+    </keybind>
+  </keyboard>
+</openbox_config>

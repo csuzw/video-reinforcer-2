@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch, call
 
 from src.config_loader import _parse
-from src.main import App
+from src.main import EXIT_QUIT, App
 
 
 # ---------------------------------------------------------------------------
@@ -416,21 +416,16 @@ class TestTransientErrors:
 
 class TestQuit:
     def test_quit_sets_stop_event(self, app):
-        with patch("builtins.open", side_effect=FileNotFoundError):
-            app._quit()
+        app._quit()
         assert app._stop.is_set()
 
-    def test_quit_starts_saved_display_manager(self, app):
-        with patch("builtins.open", return_value=__import__("io").StringIO("lightdm.service")), \
-             patch("src.main.subprocess.Popen") as mock_popen:
-            app._quit()
-        mock_popen.assert_called_once_with(["systemctl", "start", "lightdm.service"])
+    def test_quit_exits_with_quit_status(self, app):
+        """vr-app tells a deliberate quit (hand over to the desktop) from a crash by this."""
+        app._quit()
+        assert app._exit_code == EXIT_QUIT
 
-    def test_quit_does_not_start_display_manager_when_file_missing(self, app):
-        with patch("builtins.open", side_effect=FileNotFoundError), \
-             patch("src.main.subprocess.Popen") as mock_popen:
-            app._quit()
-        mock_popen.assert_not_called()
+    def test_exit_status_is_zero_unless_quit(self, app):
+        assert app._exit_code == 0
 
     def test_quit_button_on_deck_triggers_quit(self, app):
         with patch("src.main.load_config", return_value=_parse(_QUIT_CONFIG)):

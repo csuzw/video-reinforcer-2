@@ -6,9 +6,7 @@ from src.hardware import (
     Monitor,
     detected_audio_device,
     detected_outputs,
-    display_card,
     is_output_connected,
-    labwc_rc_xml,
     load_overrides,
     resolve_monitors,
 )
@@ -42,28 +40,6 @@ def _cards_file(tmp_path, text):
 
 
 PI_CARD1 = ["card1-HDMI-A-1", "card1-HDMI-A-2", "card1-Writeback-1"]
-
-
-class TestDisplayCard:
-    def test_picks_card_with_hdmi_when_vc4_is_card1(self, tmp_path):
-        drm, dri = _fake_drm(tmp_path, PI_CARD1)
-        (tmp_path / "dri" / "card0").touch()  # v3d: no connectors
-        assert display_card(drm, dri).endswith("card1")
-
-    def test_picks_card_with_hdmi_when_vc4_is_card0(self, tmp_path):
-        """Pi 4: v3d and vc4 swap numbers between boots."""
-        drm, dri = _fake_drm(tmp_path, ["card0-HDMI-A-1", "card0-HDMI-A-2"])
-        (tmp_path / "dri" / "card1").touch()
-        assert display_card(drm, dri).endswith("card0")
-
-    def test_ignores_card_with_only_writeback_or_internal(self, tmp_path):
-        drm, dri = _fake_drm(tmp_path, ["card0-Writeback-1", "card0-eDP-1", "card0-DSI-1"])
-        assert display_card(drm, dri) is None
-
-    def test_none_when_device_node_missing(self, tmp_path):
-        drm, dri = _fake_drm(tmp_path, PI_CARD1)
-        (tmp_path / "dri" / "card1").unlink()
-        assert display_card(drm, dri) is None
 
 
 class TestDetectedOutputs:
@@ -153,32 +129,3 @@ class TestResolveMonitors:
 
     def test_nothing_detected(self, tmp_path):
         assert resolve_monitors(str(tmp_path / "x"), str(tmp_path / "y"), []) == {}
-
-
-class TestLabwcRcXml:
-    def test_rules_target_resolved_outputs(self):
-        xml = labwc_rc_xml({
-            1: Monitor(1, "DP-1", None),
-            2: Monitor(2, "HDMI-A-1", None),
-        })
-        assert 'identifier="mpv-mon-1"' in xml
-        assert 'output="DP-1"' in xml
-        assert 'identifier="mpv-mon-2"' in xml
-        assert 'output="HDMI-A-1"' in xml
-        # MoveToOutput must come before ToggleFullscreen (labwc won't move fullscreen windows)
-        assert xml.index("MoveToOutput") < xml.index("ToggleFullscreen")
-
-    def test_valid_xml(self):
-        import xml.etree.ElementTree as ET
-        ET.fromstring(labwc_rc_xml({1: Monitor(1, "HDMI-A-1", None)}))
-
-    def test_labwc_setup_writes_file_and_prints_card(self, tmp_path, monkeypatch, capsys):
-        drm, dri = _fake_drm(tmp_path, PI_CARD1)
-        monkeypatch.setattr(hardware, "DRM_ROOT", drm)
-        monkeypatch.setattr(hardware, "DEV_DRI", dri)
-        monkeypatch.setattr(hardware, "ASOUND_CARDS", _cards_file(tmp_path, PI_ASOUND))
-        monkeypatch.setattr(hardware, "CONFIG_PATHS", ())
-        rc = tmp_path / "labwc" / "rc.xml"
-        assert hardware._labwc_setup(str(rc), wait_seconds=0) == 0
-        assert 'output="HDMI-A-2"' in rc.read_text()
-        assert capsys.readouterr().out.strip().endswith("card1")
