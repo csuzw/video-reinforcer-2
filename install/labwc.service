@@ -18,10 +18,11 @@ User=root
 # XDG_RUNTIME_DIR is created by RuntimeDirectory= below
 Environment=XDG_RUNTIME_DIR=/run/labwc
 Environment=WAYLAND_DISPLAY=wayland-0
-# Use the vc4 display controller directly; skip GPU (v3d) for compositor output
 Environment=WLR_BACKENDS=drm
-Environment=WLR_DRM_DEVICES=/dev/dri/card1
-# Pi 5 requires libliftoff for DRM plane allocation
+# WLR_DRM_DEVICES is set by labwc-start.sh: it picks the vc4 display
+# controller (the card with HDMI connectors). The card number is not stable
+# across boots on a Pi 4, so it must not be hard-coded here.
+# libliftoff for DRM plane allocation (required on Pi 5, harmless on Pi 4)
 Environment=WLR_DRM_FORCE_LIBLIFTOFF=1
 # Keep compositor running even with no physical outputs connected
 Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
@@ -31,7 +32,7 @@ Environment=LABWC_FALLBACK_OUTPUT=NOOP-1
 Environment=LIBSEAT_BACKEND=seatd
 RuntimeDirectory=labwc
 RuntimeDirectoryMode=0755
-ExecStart=/usr/bin/labwc -C /opt/video-reinforcer/labwc
+ExecStart=/opt/video-reinforcer/labwc-start.sh -C /opt/video-reinforcer/labwc
 Restart=on-failure
 RestartSec=3
 

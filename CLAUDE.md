@@ -55,7 +55,8 @@ button_renderer.py   — PIL image rendering for Stream Deck keys
 
 ## Hardware notes
 
-- Raspberry Pi 5 with two micro-HDMI ports
+- Raspberry Pi 5 (primary, tested) or Pi 4; both have two micro-HDMI ports
+- Never hard-code the DRM card number: on a Pi 4, v3d/vc4 swap between card0/card1 across boots (install/labwc-start.sh detects the HDMI card)
 - HDMI-A-1 is the port closest to the USB-C power connector (monitor 1)
 - HDMI-A-2 is the other port (monitor 2)
 - Elgato Stream Deck: any model supported (Mini, Classic, XL, etc.)

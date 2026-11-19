@@ -1,5 +1,5 @@
 #!/bin/bash
-# Video Reinforcer — Raspberry Pi 5 setup script
+# Video Reinforcer — Raspberry Pi 4 / 5 setup script
 # Run as root: sudo bash setup.sh
 set -e
 
@@ -99,6 +99,10 @@ EOF
 # ---- Deploy labwc kiosk config ----
 mkdir -p "$APP_DIR/labwc"
 cp "$SCRIPT_DIR/labwc/rc.xml" "$APP_DIR/labwc/rc.xml"
+# Launcher that points labwc at the HDMI display device (card number varies by boot on Pi 4)
+cp "$SCRIPT_DIR/labwc-start.sh" "$APP_DIR/labwc-start.sh"
+sed -i 's/\r$//' "$APP_DIR/labwc-start.sh"  # tolerate a Windows checkout
+chmod 755 "$APP_DIR/labwc-start.sh"
 
 # ---- Install and enable systemd services ----
 cp "$SCRIPT_DIR/labwc.service" /etc/systemd/system/

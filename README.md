@@ -1,6 +1,6 @@
 # Video Reinforcer
 
-A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato Stream Deck (or keyboard) triggers full-screen looping video on a specific HDMI monitor, with audio delivered through that monitor's built-in speakers. Only one video plays at a time. Monitors are blank and silent otherwise.
+A Raspberry Pi 4 / Pi 5 kiosk application for video reinforcement audiometry. An Elgato Stream Deck (or keyboard) triggers full-screen looping video on a specific HDMI monitor, with audio delivered through that monitor's built-in speakers. Only one video plays at a time. Monitors are blank and silent otherwise.
 
 ---
 
@@ -8,13 +8,13 @@ A Raspberry Pi 5 kiosk application for video reinforcement audiometry. An Elgato
 
 | Component | Requirement |
 |---|---|
-| **Pi model** | Raspberry Pi 5 only |
+| **Pi model** | Raspberry Pi 5 or Raspberry Pi 4 |
 | **Operating system** | Any 64-bit Linux with labwc, seatd, mpv, systemd, and Python 3 |
 | **Monitors** | Up to 2, connected via micro-HDMI; audio delivered over HDMI |
 | **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
 | **Config/video storage** | USB stick |
 
-The app itself has no OS-specific code. The Pi 5 requirement comes from the hardware: the audio device names, DRM card assignment, and DRM plane allocation flags are all Pi 5-specific. The provided setup script (`install/setup.sh`) uses `apt-get` and is written for Debian-based distributions (Raspberry Pi OS, Ubuntu, etc.). On other package managers the dependencies would need to be installed manually before running the app.
+The app itself has no OS-specific code. The Pi requirement comes from the hardware: the HDMI audio device names (`vc4hdmi0`/`vc4hdmi1`) and the vc4 display controller are specific to the Pi 4 and Pi 5. The display device is detected at each boot rather than hard-coded, because its number (`card0`/`card1`) is not stable across reboots on a Pi 4. The app is developed and tested mainly on a Pi 5. The provided setup script (`install/setup.sh`) uses `apt-get` and is written for Debian-based distributions (Raspberry Pi OS, Ubuntu, etc.). On other package managers the dependencies would need to be installed manually before running the app.
 
 ---
 
@@ -147,7 +147,7 @@ Key names are case-insensitive. Common values:
 
 ### Monitor numbering
 
-`1` is the micro-HDMI port closest to the USB-C power connector on the Pi 5. `2` is the other port.
+`1` is the micro-HDMI port closest to the USB-C power connector (labelled HDMI0 on the board, on both the Pi 4 and Pi 5). `2` is the other port.
 
 ---
 
@@ -305,6 +305,18 @@ journalctl -u video-reinforcer -b
 **Monitors stay blank after boot (no error message)**
 - labwc may have failed to start. Check: `systemctl status labwc`
 - If labwc crashed, check: `journalctl -u labwc -b`
+
+**Black screen after a reboot, Stream Deck still shows the Elgato logo**
+- The app never started because labwc couldn't find the HDMI outputs. The
+  Elgato logo gives it away: the app clears it as soon as it starts.
+- Cause: the Pi has two DRM devices, the 3D GPU (`v3d`, no outputs) and the
+  display controller (`vc4`, which owns the HDMI ports). Which one is `card0`
+  and which is `card1` can swap between boots, especially on a Pi 4. Older
+  versions hard-coded `/dev/dri/card1`, so they worked on some boots and showed
+  a black screen on others.
+- Fixed: `labwc-start.sh` now picks whichever card has the HDMI connectors on
+  every boot. Update with `git pull && sudo bash install/setup.sh`, then reboot.
+- To check which card was picked: `journalctl -u labwc -b | grep labwc-start`
 
 **Pi boots to a text console / login prompt instead of the kiosk app**
 - All services may show as "active" yet nothing is on screen — something else
