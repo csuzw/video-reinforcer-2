@@ -1,7 +1,7 @@
 import logging
 import os
 import signal
-import subprocess
+import sys
 import threading
 from typing import Dict, Optional
 
@@ -14,9 +14,12 @@ from .usb_monitor import USBMonitor
 
 log = logging.getLogger(__name__)
 
-USB_MOUNT = "/mnt/vr-usb"
 _TRANSIENT_ERROR_DURATION = 4.0  # seconds before auto-clearing a transient error
-_DISPLAY_MANAGER_FILE = "/opt/video-reinforcer/display-manager"
+
+# Exit status for a deliberate quit (quit button/key). install/vr-app restarts
+# the app after any other non-zero exit (a crash), and stops on 0 (SIGTERM,
+# e.g. the session ending at shutdown). Keep in sync with install/vr-app.
+EXIT_QUIT = 10
 
 _MSG_NO_USB = (
     "No USB stick detected.\n"
@@ -59,8 +62,9 @@ class App:
             on_unmounted=self._on_usb_unmounted,
         )
         self._stop = threading.Event()
+        self._exit_code = 0
 
-    def run(self):
+    def run(self) -> int:
         log.info("Video Reinforcer starting")
         self._display.start()
         self._display.show_error(_MSG_NO_USB)
@@ -74,6 +78,7 @@ class App:
 
         self._stop.wait()
         self._shutdown()
+        return self._exit_code
 
     # ------------------------------------------------------------------
     # USB events
@@ -82,7 +87,7 @@ class App:
     def _on_usb_mounted(self):
         log.info("USB mounted — loading config")
         try:
-            config = load_config()
+            config = load_config(self._usb.mount_point)
         except ConfigError as e:
             log.error("Config error: %s", e)
             self._usb_ok = False
@@ -283,19 +288,11 @@ class App:
     # ------------------------------------------------------------------
 
     def _quit(self):
+        # The session script (install/vr-session) sees EXIT_QUIT and hands
+        # the screen over to the desktop, or a login prompt if there is none.
         log.info("Quit requested — exiting")
-        self._restore_display_manager()
+        self._exit_code = EXIT_QUIT
         self._stop.set()
-
-    def _restore_display_manager(self):
-        try:
-            with open(_DISPLAY_MANAGER_FILE) as f:
-                dm = f.read().strip()
-            if dm:
-                log.info("Starting display manager: %s", dm)
-                subprocess.Popen(["systemctl", "start", dm])
-        except FileNotFoundError:
-            pass  # no display manager was configured; terminal stays
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -315,7 +312,7 @@ def main():
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    App().run()
+    sys.exit(App().run())
 
 
 if __name__ == "__main__":

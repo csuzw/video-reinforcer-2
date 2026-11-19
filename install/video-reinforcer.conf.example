@@ -1,0 +1,16 @@
+# Video Reinforcer hardware settings
+#
+# Normally nothing needs to be set here: outputs and audio are detected
+# automatically. Remove the # from a line to override that setting, then
+# reboot.
+#
+# Which display output each monitor uses. On a Raspberry Pi, HDMI-A-1 is the
+# port nearest the USB-C power connector. Other PCs may use names like DP-1.
+#MONITOR_1_OUTPUT=HDMI-A-1
+#MONITOR_2_OUTPUT=HDMI-A-2
+#
+# Which sound device plays each monitor's audio (mpv --audio-device format).
+# Detected automatically on a Raspberry Pi. On other PCs list devices with:
+#   mpv --audio-device=help
+#MONITOR_1_AUDIO=alsa/plughw:CARD=vc4hdmi0,DEV=0
+#MONITOR_2_AUDIO=alsa/plughw:CARD=vc4hdmi1,DEV=0

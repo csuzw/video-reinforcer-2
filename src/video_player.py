@@ -9,23 +9,15 @@ from typing import Callable, Optional
 
 log = logging.getLogger(__name__)
 
-_SOCKET_TEMPLATE = "/tmp/mpv-monitor-{monitor}.sock"
+_SOCKET_TEMPLATE = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "mpv-monitor-{monitor}.sock"
+)
 _BLANK_VIDEO = "/opt/video-reinforcer/blank.mp4"
 _WATERMARK_ID = 1  # osd-overlay ID; must be unique per mpv instance
 
-# Wayland output names / DRM connector names on Pi 5.
-# HDMI-A-1 is the port closest to the USB-C power connector.
-# Used both as the labwc MoveToOutput target and for sysfs hot-plug detection.
-CONNECTORS = {
-    1: "HDMI-A-1",
-    2: "HDMI-A-2",
-}
-
-# ALSA audio devices matching each HDMI port (vc4hdmi0 = HDMI-A-1, vc4hdmi1 = HDMI-A-2)
-AUDIO_DEVICES = {
-    1: "alsa/plughw:CARD=vc4hdmi0,DEV=0",
-    2: "alsa/plughw:CARD=vc4hdmi1,DEV=0",
-}
+# The output and audio device for each monitor are resolved by src/hardware.py
+# and passed in. mpv asks the compositor to fullscreen its window on that
+# output (--fs-screen-name), so no compositor-specific window rules are needed.
 
 
 class VideoPlayer:
@@ -35,9 +27,17 @@ class VideoPlayer:
     unplugged) or if a video fails to play (corrupt/unsupported file).
     """
 
-    def __init__(self, monitor: int, on_error: Callable[[int, str], None]):
+    def __init__(
+        self,
+        monitor: int,
+        on_error: Callable[[int, str], None],
+        output: Optional[str] = None,
+        audio_device: Optional[str] = None,
+    ):
         self.monitor = monitor
+        self._output = output
         self._on_error = on_error
+        self._audio_device = audio_device
         self._socket_path = _SOCKET_TEMPLATE.format(monitor=monitor)
         self._process: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
@@ -49,28 +49,33 @@ class VideoPlayer:
         if os.path.exists(self._socket_path):
             os.remove(self._socket_path)
 
-        audio_device = AUDIO_DEVICES.get(self.monitor)
+        audio_device = self._audio_device
         cmd = [
             "mpv",
             "--vo=gpu",
             "--gpu-context=wayland",
-            # labwc window rules match on this app-id to place the window on
-            # the correct output and fullscreen it.  Do NOT pass --fullscreen
-            # here: labwc's MoveToOutput refuses to move an already-fullscreen
-            # window, so the rule must fire first.
             f"--wayland-app-id=mpv-mon-{self.monitor}",
+            "--fullscreen",
             "--loop-file=inf",
             "--no-terminal",
-            "--really-quiet",
+            # Warnings and errors go to stderr, which ends up in the journal
+            # alongside the app's own log (journalctl -t video-reinforcer).
+            "--msg-level=all=warn",
             "--idle=yes",
             "--pause",
             "--cursor-autohide=always",
+            # Keyboard input is read by the app (evdev), not by mpv: a stray
+            # "q" or space on the focused window must not quit or pause it.
+            "--no-input-default-bindings",
+            "--input-vo-keyboard=no",
             f"--input-ipc-server={self._socket_path}",
         ]
+        if self._output:
+            cmd.append(f"--fs-screen-name={self._output}")
         if audio_device:
             cmd.append(f"--audio-device={audio_device}")
 
-        self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self._process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
         self._running = True
 
         # Wait up to 5 s for IPC socket to appear
@@ -92,7 +97,7 @@ class VideoPlayer:
         self._send(["set_property", "osd-border-color", "#000000"])
         self._send(["set_property", "osd-border-size", 2])
         self._show_watermark()
-        log.info("Monitor %d player ready (app-id=mpv-mon-%d)", self.monitor, self.monitor)
+        log.info("Monitor %d player ready (output %s)", self.monitor, self._output or "any")
 
     def play(self, path: str):
         self._loading = True

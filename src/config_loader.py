@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-USB_MOUNT = "/mnt/vr-usb"
+
 CONFIG_FILE = "config.json"
 
 
@@ -26,13 +26,14 @@ class ButtonConfig:
     monitor: int  # 1 or 2
     style: ButtonStyle
     key: Optional[str] = None  # normalized lowercase keyboard key, e.g. "f1", "1", "a"
+    root: str = ""  # folder the USB stick is mounted at; paths are relative to it
 
     def video_path(self) -> str:
-        return os.path.join(USB_MOUNT, self.video)
+        return os.path.join(self.root, self.video)
 
     def image_path(self) -> Optional[str]:
         if self.style.type == "image" and self.style.image:
-            return os.path.join(USB_MOUNT, self.style.image)
+            return os.path.join(self.root, self.style.image)
         return None
 
 
@@ -71,8 +72,8 @@ class AppConfig:
         return bool(self.deck_only_actions())
 
 
-def load_config() -> AppConfig:
-    config_path = os.path.join(USB_MOUNT, CONFIG_FILE)
+def load_config(usb_root: str) -> AppConfig:
+    config_path = os.path.join(usb_root, CONFIG_FILE)
     if not os.path.exists(config_path):
         raise ConfigError("config.json not found on USB stick")
     try:
@@ -80,10 +81,10 @@ def load_config() -> AppConfig:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise ConfigError(f"Invalid JSON in config.json: {e}")
-    return _parse(data)
+    return _parse(data, usb_root)
 
 
-def _parse(data: dict) -> AppConfig:
+def _parse(data: dict, root: str = "") -> AppConfig:
     if "buttons" not in data:
         raise ConfigError("config.json missing 'buttons' section")
 
@@ -121,6 +122,7 @@ def _parse(data: dict) -> AppConfig:
             monitor=monitor,
             style=style,
             key=keyboard_key,
+            root=root,
         )
 
     if not buttons:

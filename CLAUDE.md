@@ -45,20 +45,37 @@ README changes should be included in the same commit as the code change.
 ```
 main.py              — event loop, state machine, wires everything together
 config_loader.py     — parses + validates config.json from USB stick
-usb_monitor.py       — pyudev watcher for USB mount/unmount
-video_player.py      — one persistent mpv process per monitor; IPC + watchdog
+usb_monitor.py       — pyudev watcher; mounts the USB stick via udisks2 (udisksctl)
+hardware.py          — detects monitor outputs and audio devices; overrides file
+video_player.py      — one persistent mpv process per monitor (--fs-screen-name); IPC + watchdog
 display_manager.py   — coordinates video players; detects monitor connect/disconnect
 deck_manager.py      — Stream Deck input + USB hotplug detection; reconnects automatically
 keyboard_reader.py   — evdev raw keyboard input
 button_renderer.py   — PIL image rendering for Stream Deck keys
+
+install/setup.sh     — installs packages, deploys to /opt/video-reinforcer, configures greetd
+install/vr-session   — greetd auto-login session: runs labwc, restarts it if it dies; desktop after quit
+install/vr-app       — run by labwc -S: runs the app, restarts it after a crash
+install/labwc/rc.xml — static labwc config (no compositor shortcuts)
 ```
+
+## Boot / session design
+
+The kiosk is an ordinary auto-login desktop session, not a root system service:
+greetd logs the kiosk user in, logind hands the session the display, input and
+sound devices, udisks2 mounts the USB stick. Do not reintroduce boot-ordering
+workarounds (seatd, plymouth ordering, fbcon cmdline edits, DRM card
+detection, root services) — that design was unreliable, especially on a Pi 4,
+and is what this replaced. If something goes wrong at boot, look for what the
+standard session machinery is missing rather than working around it.
 
 ## Hardware notes
 
 - Raspberry Pi 5 (primary, tested) or Pi 4; both have two micro-HDMI ports
-- Never hard-code the DRM card number: on a Pi 4, v3d/vc4 swap between card0/card1 across boots (install/labwc-start.sh detects the HDMI card)
+- Never hard-code the DRM card number: on a Pi 4, v3d/vc4 swap between card0/card1 across boots (wlroots picks the right one itself)
 - HDMI-A-1 is the port closest to the USB-C power connector (monitor 1)
 - HDMI-A-2 is the other port (monitor 2)
 - Elgato Stream Deck: any model supported (Mini, Classic, XL, etc.)
-- App runs as root (required for USB mounting and DRM access)
+- App runs as the kiosk user (by default whoever ran setup), not root
+- Audio goes straight to each HDMI port's ALSA device; vr-session stops PipeWire while the kiosk runs
 - Videos loop indefinitely; only one video plays at a time across both monitors

@@ -1,0 +1,49 @@
+#!/bin/sh
+# Video Reinforcer kiosk session.
+#
+# greetd runs this at boot as the kiosk user, inside an ordinary logind
+# session: exactly what happens when someone logs in to a desktop. logind
+# hands labwc the display, keyboard and sound devices and moves the text
+# console out of the way, so nothing here needs root or any boot-order tricks.
+APP_DIR=/opt/video-reinforcer
+QUIT_FLAG="${XDG_RUNTIME_DIR:-/tmp}/video-reinforcer-quit"
+
+log() { echo "$*" | systemd-cat -t video-reinforcer -p "${2:-info}"; }
+
+# Get display/input devices from logind, never from a stray seatd.
+export LIBSEAT_BACKEND=logind
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=labwc:wlroots
+
+# The app plays sound straight to each monitor's ALSA device. PipeWire (on
+# desktop installs) would otherwise compete for those devices, so it is kept
+# off while the kiosk runs and started again for the desktop after quit.
+PIPEWIRE_UNITS="pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service wireplumber.service"
+systemctl --user stop $PIPEWIRE_UNITS 2>/dev/null
+
+trap 'exit 0' HUP INT TERM
+rm -f "$QUIT_FLAG"
+
+while :; do
+    # -S: labwc runs vr-app and exits when vr-app does.
+    systemd-cat -t labwc /usr/bin/labwc -C "$APP_DIR/labwc" -S "$APP_DIR/vr-app"
+    [ -e "$QUIT_FLAG" ] && break
+    log "labwc exited unexpectedly; restarting it in 3 seconds" err
+    sleep 3
+done
+rm -f "$QUIT_FLAG"
+
+# Quit was pressed: hand the screen over to the desktop, if setup.sh found one.
+# Otherwise this session ends and greetd shows a text login prompt.
+unset LIBSEAT_BACKEND XDG_CURRENT_DESKTOP
+systemctl --user start pipewire.socket pipewire-pulse.socket 2>/dev/null
+if [ -r /etc/video-reinforcer/desktop.env ]; then
+    . /etc/video-reinforcer/desktop.env
+    if [ -n "$DESKTOP_EXEC" ]; then
+        log "Quit: starting the desktop ($DESKTOP_EXEC)"
+        [ -n "$DESKTOP_NAMES" ] && export XDG_CURRENT_DESKTOP="$DESKTOP_NAMES"
+        [ -n "$DESKTOP_SESSION_NAME" ] && export XDG_SESSION_DESKTOP="$DESKTOP_SESSION_NAME" DESKTOP_SESSION="$DESKTOP_SESSION_NAME"
+        exec $DESKTOP_EXEC
+    fi
+fi
+log "Quit: no desktop installed; ending the session"
