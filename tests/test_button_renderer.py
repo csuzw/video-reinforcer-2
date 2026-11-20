@@ -129,3 +129,23 @@ class TestLabel:
             for x in range(72)
         )
         assert different
+
+
+class TestNewRendering:
+    def test_badge_drawn_in_corner(self):
+        plain = render_button((72, 72), style_type="color", color="#000000")
+        badged = render_button((72, 72), style_type="color", color="#000000", badge="1")
+        assert plain.getpixel((11, 17)) != badged.getpixel((11, 17))
+
+    def test_long_label_does_not_crash(self):
+        img = render_button((72, 72), style_type="color", color="#000000",
+                            label="A really very long video name indeed")
+        assert img.size == (72, 72)
+
+    def test_paging_key_size(self):
+        from src.button_renderer import render_paging_key
+        assert render_paging_key((96, 96), 1, 2, 3).size == (96, 96)
+
+    def test_screen_text_size(self):
+        from src.button_renderer import render_screen_text
+        assert render_screen_text((248, 58), "Page 1 of 2").size == (248, 58)

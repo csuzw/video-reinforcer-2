@@ -44,7 +44,8 @@ README changes should be included in the same commit as the code change.
 
 ```
 main.py              — event loop, state machine, wires everything together
-config_loader.py     — parses + validates config.json from USB stick
+config_loader.py     — parses + validates config.json (or folder mode); lays buttons out onto pages per deck
+folder_scanner.py    — no config.json: finds Monitor N/Videos + Pictures on the USB stick
 usb_monitor.py       — pyudev watcher; mounts the USB stick via udisks2 (udisksctl)
 hardware.py          — detects monitor outputs and audio devices; overrides file
 video_player.py      — one persistent mpv process per monitor (--fs-screen-name); IPC + watchdog
@@ -75,7 +76,7 @@ standard session machinery is missing rather than working around it.
 - Never hard-code the DRM card number: on a Pi 4, v3d/vc4 swap between card0/card1 across boots (wlroots picks the right one itself)
 - HDMI-A-1 is the port closest to the USB-C power connector (monitor 1)
 - HDMI-A-2 is the other port (monitor 2)
-- Elgato Stream Deck: any model supported (Mini, Classic, XL, etc.)
+- Elgato Stream Deck: any model supported (Mini, Classic, XL, etc.). The Neo's two touch buttons arrive as key numbers after the 8 normal keys; deck_manager turns them into previous/next page
 - App runs as the kiosk user (by default whoever ran setup), not root
 - Audio goes straight to each HDMI port's ALSA device; vr-session stops PipeWire while the kiosk runs
 - Videos loop indefinitely; only one video plays at a time across both monitors

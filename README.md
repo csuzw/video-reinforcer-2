@@ -11,7 +11,7 @@ A Raspberry Pi 4 / Pi 5 kiosk application for video reinforcement audiometry. An
 | **Device** | Raspberry Pi 5 or Pi 4 (tested mainly on Pi 5). Other Linux PCs should work, untested |
 | **Operating system** | Raspberry Pi OS (Lite or Desktop, 64-bit), or any Debian-based Linux with systemd that packages labwc, greetd, udisks2, mpv and Python 3 |
 | **Monitors** | Up to 2, connected via HDMI (or DisplayPort etc. on a PC); audio delivered over HDMI |
-| **Input device** | Elgato Stream Deck (any model) and/or USB keyboard |
+| **Input device** | Elgato Stream Deck (any model, including the Neo's page buttons) and/or USB keyboard |
 | **Config/video storage** | USB stick |
 
 Hardware is detected every time the app starts (`src/hardware.py`):
@@ -25,7 +25,7 @@ The provided setup script (`install/setup.sh`) uses `apt-get` and is written for
 ## How it works
 
 1. The Pi boots directly into the app — no login prompt.
-2. The app reads `config.json` from a USB stick to determine which buttons play which videos on which monitor.
+2. The app reads a USB stick to work out which buttons play which videos on which monitor. That's either from how the videos are arranged in folders, or from a `config.json` file for more control (see [USB stick layout](#usb-stick-layout)).
 3. Press a Stream Deck button (or keyboard key) → video starts looping on the assigned monitor, and that key gets a red border on the Stream Deck (the colour is configurable).
 4. Press the same button again → video stops, monitor goes blank.
 5. Press a different button → current video stops, new video starts on its assigned monitor.
@@ -49,6 +49,46 @@ If the app crashes it is restarted within a few seconds, and so is labwc. Pressi
 
 ## USB stick layout
 
+There are two ways to set up the USB stick:
+
+- **Folders (simplest):** put videos in a folder for each monitor, and the buttons are made automatically. No `config.json` needed.
+- **`config.json`:** choose exactly which key plays what, with colours, labels, keyboard keys, pages and a quit button.
+
+If the stick has a `config.json` at its root, that's used and the folders are ignored.
+
+### Folders
+
+```
+/usb-stick/
+  Monitor 1/
+    Videos/
+      01 Elephant.mp4
+      02 Train.mp4
+      Bubbles.mp4
+    Pictures/
+      01 Elephant.png
+      02 Train.jpg
+  Monitor 2/
+    Videos/
+      Fish.mp4
+    Pictures/
+      Fish.png
+```
+
+- **Each video becomes a button.** Monitor 1's videos come first, then Monitor 2's. Each key has a small **1** or **2** in the corner showing which monitor it plays on.
+- **A picture with the same name as a video becomes that video's button image.** Case and file type don't matter, so `elephant.PNG` matches `Elephant.mp4`. A video with no picture gets a coloured key (blue for monitor 1, orange for monitor 2) with its name written on it.
+- **Order** is alphabetical, with numbers sorted as numbers. Start file names with `01 `, `02 `, … to choose the order. The number isn't shown on the key.
+- **Names are forgiving:** `Monitor 1`, `monitor1` and `MONITOR 1` all work, as do `Pictures` or `Images` and `Videos` or `Video`. Videos and pictures can also go straight into the `Monitor 1` folder.
+- **Video types:** `.mp4`, `.mov`, `.m4v`, `.mkv`, `.webm`, `.avi`, `.wmv`, `.mpg`, `.mpeg`, `.ts`. **Picture types:** `.png`, `.jpg`, `.jpeg`, `.bmp`, `.gif`, `.webp`. Other files, and hidden files that macOS and Windows add, are ignored.
+- **If there are more videos than keys**, they're split over [pages](#pages).
+- **To add videos**, copy them onto the stick on any PC and plug it back into the Pi. The buttons are worked out again every time the stick is plugged in.
+
+A picture that doesn't match any video, usually because of a typo like `Elefant.png`, shows a 4-second message naming the file.
+
+Folder mode needs a Stream Deck: there are no keyboard keys and no quit button. To get out of the kiosk, see [Getting back to the desktop or a shell](#getting-back-to-the-desktop-or-a-shell).
+
+### config.json
+
 ```
 /usb-stick/
   config.json
@@ -60,6 +100,20 @@ If the app crashes it is restarted within a few seconds, and so is labwc. Pressi
 ```
 
 The app looks for `config.json` at the root of the USB stick. Videos and button images can be in any subfolder — paths in `config.json` are relative to the root of the USB stick.
+
+---
+
+## Pages
+
+When there are more buttons than fit on the Stream Deck, they're split over pages:
+
+- **Stream Deck Neo:** the two touch buttons under the keys change page. They light up when there's more than one page, and the Neo's small screen shows "Page 2 of 3".
+- **Other Stream Decks:** two keys become **◀** and **▶**, showing the page number (e.g. `2/3`). These keys only appear when there's more than one page.
+- **Keyboard:** Page Up and Page Down.
+
+Paging wraps round: ▶ on the last page goes to the first. A video keeps playing when you change page. Its red border shows whenever you're on its page, and pressing any other video's key switches to that video as usual.
+
+In folder mode the pages are made automatically to fit whichever Stream Deck is plugged in. With a 6-key Mini, the last two keys become ◀ ▶, so there are 4 videos per page. A Neo uses its touch buttons instead, so all 8 keys show videos. In `config.json` you lay out the pages yourself (see [`pages`](#pages-optional)).
 
 ---
 
@@ -120,7 +174,40 @@ Each entry maps a Stream Deck key index to a video. Key `"0"` is the top-left bu
 | `button.image` | No | Path to a PNG/JPG to display on the key (when type is `"image"`) |
 | `button.label` | No | Short text drawn at the bottom of the key |
 
-Buttons not listed in `config.json` remain dark on the Stream Deck.
+Buttons not listed in `config.json` remain dark on the Stream Deck. A button numbered beyond the keys on the connected Stream Deck (e.g. `"20"` on a 15-key Classic) can't be shown, and a 4-second message says so.
+
+Labels that are too long for a key are shrunk, then shortened with "…".
+
+### `pages` (optional)
+
+Use `pages` instead of `buttons` to give the Stream Deck several pages of buttons. Each page has the same layout as `buttons`, and the same key number can be used on every page. A page doesn't need to be full. For example, two buttons per page, one for each monitor, with different videos on page 2:
+
+```json
+{
+  "pages": [
+    {
+      "0": { "video": "videos/elephant.mp4", "monitor": 1 },
+      "1": { "video": "videos/train.mp4",    "monitor": 2 }
+    },
+    {
+      "0": { "video": "videos/fish.mp4",     "monitor": 1 },
+      "1": { "video": "videos/rocket.mp4",   "monitor": 2 }
+    }
+  ]
+}
+```
+
+A config can have `buttons` or `pages`, not both. Keyboard `key`s work whichever page is showing, so each key can only be used once across all pages. The `quit` button is on every page.
+
+### `paging` (optional)
+
+On Stream Decks without page buttons (anything except the Neo), a config with more than one page uses two keys for ◀ and ▶. By default they're the last two keys, e.g. `13` and `14` on a 15-key Classic. To use other keys:
+
+```json
+"paging": { "previous": 10, "next": 14 }
+```
+
+A button on the same key as ◀ or ▶ is hidden, and a 4-second message says which one. On a Neo this setting isn't used.
 
 ### `quit` (optional)
 
@@ -155,6 +242,8 @@ Key names are case-insensitive. Common values:
 | `"space"` | Space bar |
 | `"enter"` | Enter / Return |
 | `"escape"` | Escape |
+
+Page Up and Page Down change page, unless a button uses that key.
 
 ### Monitor numbering
 
@@ -256,7 +345,7 @@ python3 -m pytest tests/ -v
 
 ## Updating videos or button config
 
-No app update needed — just edit the files on the USB stick from any PC, then re-insert it into the Pi. The app detects the replug and reloads automatically.
+No app update needed. Edit the files on the USB stick on any PC, then plug it back into the Pi. The app notices and reloads automatically. In folder mode, new videos get buttons straight away.
 
 ---
 
@@ -268,7 +357,7 @@ If a quit button is configured in `config.json`, pressing it stops the app clean
 
 ### From a keyboard
 
-Ctrl+Alt+F2 switches to a text console where you can log in. Ctrl+Alt+F7 switches back to the kiosk.
+Alt+F4 does nothing: the kiosk turns off desktop shortcuts so a keyboard used for the app can't close it by accident. Ctrl+Alt+F2 switches to a text console where you can log in. Ctrl+Alt+F7 switches back to the kiosk.
 
 ### Via SSH or a text console
 
@@ -309,6 +398,9 @@ Every error state is shown on screen in plain English. The app recovers automati
 |---|---|---|
 | No USB stick | Error on all monitors, buttons dark | Insert USB stick |
 | Bad `config.json` | Error on all monitors, buttons dark | Fix config, re-insert USB stick |
+| No `config.json` and no `Monitor 1`/`Monitor 2` folders, or the folders have no videos | Error on all monitors explaining the folder layout | Add the folders or a `config.json`, re-insert USB stick |
+| A picture with no matching video (folder mode) | 4-second message naming the picture | Rename it to match its video |
+| A button can't be shown on this Stream Deck (number too high, or under a page key) | 4-second message naming the button | Move the button, or set [`paging`](#paging-optional) |
 | USB replugged | Config reloads automatically | — |
 | Button pressed for disconnected monitor | 4-second error, then clears | Check cables or fix `config.json` |
 | Video file missing or unplayable | 4-second error, then clears | Check files on USB stick |
@@ -321,9 +413,12 @@ Every error state is shown on screen in plain English. The app recovers automati
 
 **Monitors show an error message**
 - The error text on screen describes the specific problem.
-- Check the USB stick is inserted and contains `config.json` at its root.
+- Check the USB stick is inserted, and has either `config.json` at its root or `Monitor 1`/`Monitor 2` folders containing videos.
 - Validate `config.json` with a JSON validator on another PC.
 - Check that all video and image paths in `config.json` match files on the USB stick.
+
+**A button shows a coloured key instead of its picture (folder mode)**
+- The picture's name must match the video's name exactly, apart from upper/lower case and the file type: `02 Train.jpg` for `02 Train.mp4`, including the number.
 
 **Video plays but no audio**
 - Ensure the monitor's volume is turned up.

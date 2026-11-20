@@ -1,4 +1,4 @@
-streamdeck>=0.9.5
+streamdeck>=0.9.6
 Pillow>=10.0.0
 pyudev>=0.24.0
 evdev>=1.6.0; sys_platform == "linux"
