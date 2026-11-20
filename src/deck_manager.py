@@ -22,12 +22,15 @@ class DeckManager:
         on_button_press: Callable[[int], None],
         on_connected: Callable[[], None],
         on_disconnected: Callable[[], None],
+        on_page: Optional[Callable[[int], None]] = None,
     ):
         self._on_press = on_button_press
         self._on_connected = on_connected
         self._on_disconnected = on_disconnected
+        self._on_page = on_page  # called with -1 / +1 for hardware page buttons
         self._deck: Optional[StreamDeck] = None
         self._key_count = 0
+        self._touch_key_count = 0
         self._lock = threading.Lock()
         self._usb_observer: Optional[pyudev.MonitorObserver] = None
 
@@ -39,6 +42,44 @@ class DeckManager:
 
     def key_count(self) -> int:
         return self._key_count
+
+    def has_hardware_paging(self) -> bool:
+        """True for decks with their own page buttons (the Stream Deck Neo's
+        two touch buttons), which arrive as key numbers after the normal keys."""
+        return self._touch_key_count >= 2
+
+    def set_page_lights(self, on: bool):
+        """Light the hardware page buttons when there is more than one page."""
+        with self._lock:
+            if not self._deck or self._touch_key_count < 2:
+                return
+            level = 255 if on else 0
+            try:
+                for i in range(self._touch_key_count):
+                    self._deck.set_key_color(self._key_count + i, level, level, level)
+            except Exception as e:
+                log.warning("set_page_lights failed: %s", e)
+
+    def screen_size(self) -> Optional[Tuple[int, int]]:
+        """Size of the deck's info screen (Stream Deck Neo), or None if it has none."""
+        with self._lock:
+            if not self._deck:
+                return None
+            try:
+                size = tuple(self._deck.screen_image_format()["size"])
+            except Exception:
+                return None
+            return size if size[0] and size[1] else None
+
+    def set_screen_image(self, image: Image.Image):
+        with self._lock:
+            if not self._deck:
+                return
+            try:
+                native = PILHelper.to_native_screen_format(self._deck, image.convert("RGB"))
+                self._deck.set_screen_image(native)
+            except Exception as e:
+                log.warning("set_screen_image failed: %s", e)
 
     def key_image_size(self) -> Tuple[int, int]:
         with self._lock:
@@ -71,6 +112,11 @@ class DeckManager:
             try:
                 for i in range(self._key_count):
                     self._deck.set_key_image(i, blank)
+                # Stream Deck Neo: page-button lights off, info screen blank
+                for i in range(self._touch_key_count):
+                    self._deck.set_key_color(self._key_count + i, 0, 0, 0)
+                if self._touch_key_count:
+                    self._deck.set_screen_image(None)
             except Exception as e:
                 log.warning("clear_all_keys failed: %s", e)
 
@@ -114,6 +160,7 @@ class DeckManager:
                     pass
                 self._deck = None
                 self._key_count = 0
+                self._touch_key_count = 0
             log.warning("Stream Deck disconnected")
             self._on_disconnected()
 
@@ -150,6 +197,10 @@ class DeckManager:
             with self._lock:
                 self._deck = deck
                 self._key_count = deck.key_count()
+                try:
+                    self._touch_key_count = int(deck.touch_key_count())
+                except Exception:
+                    self._touch_key_count = 0
             deck.set_brightness(80)
             deck.set_key_callback(self._key_callback)
             log.info("Stream Deck connected: %s, %d keys", deck.deck_type(), deck.key_count())
@@ -159,5 +210,11 @@ class DeckManager:
             return False
 
     def _key_callback(self, deck, key: int, pressed: bool):
-        if pressed:
-            self._on_press(key)
+        if not pressed:
+            return
+        if key >= self._key_count:
+            # Touch button (Stream Deck Neo): first is previous page, second is next.
+            if self._on_page and self._touch_key_count >= 2:
+                self._on_page(-1 if key == self._key_count else 1)
+            return
+        self._on_press(key)
